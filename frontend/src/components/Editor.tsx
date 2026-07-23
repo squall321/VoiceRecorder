@@ -27,6 +27,8 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
   const pending = scenes.filter((s) => s.status !== "ready");
   const engine = engines.find((e) => e.id === project.engine);
   const exported = job?.kind === "export" && job.status === "done";
+  // 씬별로 속도를 따로 만진 씬 수 — 이 씬들은 전체 슬라이더를 따르지 않는다
+  const speedOverrideCount = scenes.filter((s) => s.speed != null).length;
 
   async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     try {
@@ -163,7 +165,7 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
             </select>
           </label>
           <label className="field">
-            말 속도 ({project.speed.toFixed(2)}×)
+            말 속도 (전체 {project.speed.toFixed(2)}×)
             <input
               type="range"
               min={0.5}
@@ -176,6 +178,21 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
                 )
               }
             />
+            {speedOverrideCount > 0 ? (
+              <button
+                className="btn small"
+                style={{ marginTop: 4 }}
+                disabled={busy}
+                onClick={() => run(() => api.applySpeed(project.id, project.speed).then(onPayload))}
+                title={`씬 ${speedOverrideCount}개에 개별 속도가 걸려 있어 전체 슬라이더를 따르지 않습니다. 눌러서 ${project.speed.toFixed(2)}×로 통일합니다.`}
+              >
+                씬 {speedOverrideCount}개 개별 속도 · 전체 통일
+              </button>
+            ) : (
+              <span className="scene-meta" style={{ marginTop: 4 }}>
+                모든 씬에 적용됨
+              </span>
+            )}
           </label>
           <label className="field">
             씬 사이 무음 (ms)

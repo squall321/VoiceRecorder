@@ -80,6 +80,11 @@ class ReorderRequest(BaseModel):
     scene_ids: list[str]
 
 
+class ApplySpeedRequest(BaseModel):
+    # 전 씬 속도를 이 값으로 통일한다 (씬별 override 를 지운다)
+    speed: float = Field(ge=0.5, le=2.0)
+
+
 class SynthesizeRequest(BaseModel):
     # 비우면 합성이 필요한 씬(pending/stale/error)만 골라 돌린다
     scene_ids: list[str] | None = None

@@ -193,6 +193,36 @@ def test_speed_change_does_not_call_the_model_again(client, stub_engine):
     assert updated["duration_sec"] == pytest.approx(original / 1.5, rel=0.05)
 
 
+def test_apply_speed_unifies_all_scenes_including_overrides(client, stub_engine):
+    project = _create(client)
+    pid = project["project"]["id"]
+    _synthesize(client, pid)
+    scenes = client.get(f"/api/projects/{pid}").json()["scenes"]
+
+    # 씬 하나에만 개별 속도를 건다 — 이러면 전체 슬라이더를 따르지 않는다
+    client.patch(f"/api/projects/{pid}/scenes/{scenes[0]['id']}", json={"speed": 0.8})
+    body = client.get(f"/api/projects/{pid}").json()
+    assert body["scenes"][0]["speed"] == 0.8
+    assert body["scenes"][1]["speed"] is None
+
+    calls_before = len(stub_engine.calls)
+    body = client.post(f"/api/projects/{pid}/apply-speed", json={"speed": 1.5}).json()
+
+    # 모든 씬의 override 가 지워지고 프로젝트 속도가 1.5 로 통일된다
+    assert body["project"]["speed"] == 1.5
+    assert all(s["speed"] is None for s in body["scenes"])
+    assert all(abs(s["effective_speed"] - 1.5) < 1e-6 for s in body["scenes"])
+    # 텍스트는 그대로라 모델을 다시 호출하지 않는다 (ffmpeg 재렌더만)
+    assert len(stub_engine.calls) == calls_before
+    assert all(s["status"] == "ready" for s in body["scenes"])
+
+
+def test_apply_speed_rejects_out_of_range(client):
+    project = _create(client)
+    pid = project["project"]["id"]
+    assert client.post(f"/api/projects/{pid}/apply-speed", json={"speed": 3.0}).status_code == 422
+
+
 def test_drift_against_script_timecode_is_reported(client):
     project = _create(client)
     pid = project["project"]["id"]

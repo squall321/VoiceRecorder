@@ -85,6 +85,13 @@ export const api = {
       body: JSON.stringify({ scene_ids }),
     }),
 
+  // 전 씬 속도를 한 값으로 통일한다 (씬별 override 제거)
+  applySpeed: (id: string, speed: number) =>
+    request<ProjectPayload>(`api/projects/${id}/apply-speed`, {
+      method: "POST",
+      body: JSON.stringify({ speed }),
+    }),
+
   synthesize: (id: string, scene_ids?: string[], force = false) =>
     request<{ job_id: string; scene_count: number }>(`api/projects/${id}/synthesize`, {
       method: "POST",

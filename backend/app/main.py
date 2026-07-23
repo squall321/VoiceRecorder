@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config, store, synth
 from .jobs import runner
 from .models import (
+    ApplySpeedRequest,
     DictionaryEntryIn,
     ParseRequest,
     ParseResponse,
@@ -280,6 +281,24 @@ def reorder(project_id: str, payload: ReorderRequest) -> dict:
         raise HTTPException(status_code=400, detail="씬 목록이 현재 상태와 다릅니다")
     store.reorder_scenes(project_id, payload.scene_ids)
     return _project_payload(project)
+
+
+@app.post("/api/projects/{project_id}/apply-speed")
+def apply_speed(project_id: str, payload: ApplySpeedRequest) -> dict:
+    """전 씬 속도를 한 값으로 통일한다 — 프로젝트 기본 속도를 바꾸고 씬별 override 를 지운다.
+
+    상단 슬라이더(프로젝트 기본값)만으로는 씬에 개별 속도가 걸린 경우 그 씬이 안 따라온다.
+    이 액션은 그 override 까지 제거해 정말로 전부 통일한다. 텍스트는 그대로라 모델을
+    다시 돌리지 않고 원본 wav 를 ffmpeg 로 다시 렌더링만 한다.
+    """
+    project = _project_or_404(project_id)
+    store.update_project(project_id, {"speed": payload.speed})
+    for scene in store.list_scenes(project_id):
+        if scene.get("speed") is not None:
+            store.update_scene(scene["id"], {"speed": None})
+    updated = _project_or_404(project_id)
+    _rerender_all(updated)
+    return _project_payload(updated)
 
 
 @app.get("/api/projects/{project_id}/scenes/{scene_id}/audio")
