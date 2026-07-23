@@ -21,6 +21,13 @@ _NUMBER_RE = re.compile(
     r"^\s*\[?\s*(?:씬|장면|Scene|SCENE|scene|S)?\s*(?P<num>\d{1,3})\s*\]?\s*[.):\-–]?\s+"
 )
 
+# 끝 시각 대신 지속시간만 적은 형식 — '(8초)' '(8초, ~32자)' '(약 8초)' '(8s)'.
+# 뒤에 붙는 글자수 메모 같은 건 통째로 삼킨다.
+_DURATION_PAREN_RE = re.compile(
+    r"[(\[]\s*(?:약\s*)?(?P<value>\d{1,4}(?:[.,]\d+)?)\s*(?:초|sec(?:onds?|s)?|s)\b[^)\]]*[)\]]",
+    re.IGNORECASE,
+)
+
 _QUOTE_CHARS = "\"'“”‘’「」『』«»"
 _QUOTE_OPEN_RE = re.compile(f"[{re.escape(_QUOTE_CHARS)}]")
 
@@ -40,6 +47,8 @@ class ParsedScene:
     title: str | None = None
     target_start_sec: float | None = None
     target_end_sec: float | None = None
+    # '(8초)' 처럼 길이만 적힌 경우. 시작 시각은 앞 씬들을 누적해 parse_script 가 채운다.
+    duration_hint_sec: float | None = None
 
     @property
     def target_duration_sec(self) -> float | None:
@@ -84,11 +93,15 @@ def format_timecode(seconds: float, *, millis: bool = False) -> str:
 
 
 def _strip_quotes(text: str) -> str:
+    """본문을 감싼 따옴표만 벗긴다.
+
+    양끝을 각각 탐욕적으로 벗기면 안 된다 — `"'인용'이라던 말."` 처럼 본문이 인용으로
+    시작하면 여는 작은따옴표까지 먹어서 짝 없는 따옴표가 남는다.
+    양끝이 **둘 다** 따옴표일 때만 한 쌍씩 벗긴다.
+    """
     text = text.strip()
-    while text and text[0] in _QUOTE_CHARS:
-        text = text[1:].lstrip()
-    while text and text[-1] in _QUOTE_CHARS:
-        text = text[:-1].rstrip()
+    while len(text) >= 2 and text[0] in _QUOTE_CHARS and text[-1] in _QUOTE_CHARS:
+        text = text[1:-1].strip()
     return text
 
 
@@ -118,7 +131,7 @@ def _parse_block(block: str, index: int) -> ParsedScene | None:
     else:
         header, body = rest, ""
 
-    start_sec = end_sec = None
+    start_sec = end_sec = duration_hint = None
     tc = _TIMECODE_RE.search(header)
     if tc:
         try:
@@ -127,6 +140,15 @@ def _parse_block(block: str, index: int) -> ParsedScene | None:
         except ValueError:
             start_sec = end_sec = None
         header = (header[: tc.start()] + " " + header[tc.end() :]).strip()
+    else:
+        # 타임코드가 없으면 '(8초)' 형식을 본다. 타임코드가 우선이다.
+        dur = _DURATION_PAREN_RE.search(header)
+        if dur:
+            try:
+                duration_hint = float(dur.group("value").replace(",", "."))
+            except ValueError:
+                duration_hint = None
+            header = (header[: dur.start()] + " " + header[dur.end() :]).strip()
 
     if not body:
         # 따옴표가 없는 형식. 타임코드가 있으면 그 앞이 제목, 뒤가 본문이다.
@@ -151,6 +173,7 @@ def _parse_block(block: str, index: int) -> ParsedScene | None:
         title=title,
         target_start_sec=start_sec,
         target_end_sec=end_sec,
+        duration_hint_sec=duration_hint,
     )
 
 
@@ -175,8 +198,24 @@ def parse_script(raw: str) -> ParseResult:
         if scene is not None:
             scenes.append(scene)
 
+    _fill_cumulative_targets(scenes)
     structured = any(s.number is not None or s.target_start_sec is not None for s in scenes)
     return ParseResult(scenes=scenes, structured=structured)
+
+
+def _fill_cumulative_targets(scenes: list[ParsedScene]) -> None:
+    """'(8초)' 처럼 길이만 적힌 씬에 시작·끝 시각을 앞에서부터 누적해 채운다.
+
+    타임코드가 명시된 씬은 건드리지 않고, 그 끝 시각을 이후 누적의 기준으로 삼는다
+    (두 형식이 섞여 있어도 어긋나지 않게).
+    """
+    cursor = 0.0
+    for scene in scenes:
+        if scene.target_start_sec is None and scene.duration_hint_sec:
+            scene.target_start_sec = cursor
+            scene.target_end_sec = cursor + scene.duration_hint_sec
+        if scene.target_end_sec is not None:
+            cursor = scene.target_end_sec
 
 
 def _split_single_block(raw: str) -> list[str]:

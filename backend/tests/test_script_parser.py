@@ -44,6 +44,48 @@ def test_en_dash_and_hyphen_and_tilde_all_parse():
         assert result.scenes[0].target_end_sec == 5.0, dash
 
 
+DURATION_SCRIPT = """01 오프닝 (8초, ~32자) "첫 씬입니다."
+
+02 문제 배정 (11초, ~46자) "둘째 씬입니다."
+
+03 전환 (7초) "셋째 씬입니다."
+"""
+
+
+def test_duration_only_format_accumulates_timecodes():
+    """'(8초)' 처럼 길이만 적힌 형식 — 시작 시각을 앞에서부터 누적해 채운다."""
+    result = parse_script(DURATION_SCRIPT)
+
+    assert result.structured is True
+    assert len(result.scenes) == 3
+    assert [s.target_start_sec for s in result.scenes] == [0.0, 8.0, 19.0]
+    assert [s.target_end_sec for s in result.scenes] == [8.0, 19.0, 26.0]
+    assert [s.target_duration_sec for s in result.scenes] == [8.0, 11.0, 7.0]
+
+
+def test_duration_annotation_is_stripped_from_title():
+    result = parse_script(DURATION_SCRIPT)
+    assert [s.title for s in result.scenes] == ["오프닝", "문제 배정", "전환"]
+    assert result.scenes[0].text == "첫 씬입니다."
+
+
+@pytest.mark.parametrize("header", ["(8초)", "(약 8초)", "(8s)", "(8 sec)", "(8초, ~32자)"])
+def test_duration_variants(header):
+    result = parse_script(f'01 오프닝 {header} "본문입니다."')
+    assert result.scenes[0].target_duration_sec == 8.0
+    assert result.scenes[0].title == "오프닝"
+
+
+def test_explicit_timecode_wins_over_duration_and_anchors_the_rest():
+    """두 형식이 섞이면 명시된 타임코드를 기준으로 이후 누적이 이어진다."""
+    raw = '01 가 (5초) "하나."\n\n02 나 (0:30–0:40) "둘."\n\n03 다 (6초) "셋."'
+    scenes = parse_script(raw).scenes
+
+    assert (scenes[0].target_start_sec, scenes[0].target_end_sec) == (0.0, 5.0)
+    assert (scenes[1].target_start_sec, scenes[1].target_end_sec) == (30.0, 40.0)
+    assert (scenes[2].target_start_sec, scenes[2].target_end_sec) == (40.0, 46.0)
+
+
 def test_falls_back_to_paragraph_split():
     raw = "첫 문단입니다.\n\n두 번째 문단입니다.\n\n세 번째 문단입니다."
     result = parse_script(raw)
@@ -72,6 +114,15 @@ def test_multiline_body_is_joined():
 
     assert len(result.scenes) == 1
     assert result.scenes[0].text == "첫 줄 이어지는 둘째 줄."
+
+
+def test_inner_quotes_survive_outer_stripping():
+    """본문이 인용으로 시작해도 여는 따옴표가 살아 있어야 한다 (짝 없는 따옴표 방지)."""
+    result = parse_script("""01 자체교정 (16초) "'그라파이트로 충분하다'던 초기 계산." """)
+    text = result.scenes[0].text
+
+    assert text == "'그라파이트로 충분하다'던 초기 계산."
+    assert text.count("'") == 2
 
 
 def test_body_without_quotes():
