@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-melo/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# 런타임 데이터 · 모델 가중치 (Drive 경유, git 에 넣지 않는다)
+var/
+data/
+*.safetensors
+*.pth
+*.pt
+*.onnx
+
+# 산출물
+*.mp3
+*.wav
+*.srt
+
+# 로컬 환경
+.env
+.env.local
+
+# 도구 상태
+.bkit/
+.koo-llm-sessions/
+.claude/settings.local.json
