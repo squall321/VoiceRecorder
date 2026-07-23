@@ -1,0 +1,32 @@
+[project]
+name = "voicerecorder-backend"
+version = "0.1.0"
+description = "내레이션 스크립트를 씬 단위 음성(mp3)으로 만드는 HEAXHub 서브 플랫폼 백엔드"
+requires-python = ">=3.12"
+
+# torch / torchaudio / chatterbox-tts 는 여기 넣지 않는다.
+# chatterbox-tts 가 torch==2.6.0 을 핀하는데 그 휠에는 sm_120(Blackwell) 커널이 없어
+# RTX 50 시리즈에서 런타임에 죽는다. scripts/setup-backend.sh 가 cu130 torch 를 먼저 깔고
+# chatterbox-tts 를 --no-deps 로 설치하는 순서를 강제한다.
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
