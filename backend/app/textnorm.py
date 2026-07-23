@@ -19,7 +19,7 @@ _NATIVE_TENS_ATTR = ["", "열", "스무", "서른", "마흔", "쉰", "예순", "
 _NATIVE_COUNTERS = (
     "개",
     "명",
-    "분",  # '세 분' — 시간 '분' 과 겹치지만 앞이 고유어권 수일 때만 적용된다
+    "시",  # 시각은 고유어 — '세 시'. 반면 '분'은 한자어라 여기 없다 ('삼십 분')
     "살",
     "마리",
     "번",
@@ -57,6 +57,8 @@ _SYMBOL_MAP = {
 
 _NUMBER_RE = re.compile(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?")
 _RANGE_RE = re.compile(r"(?<=\d)\s*[~∼]\s*(?=\d)")
+# 앞뒤가 공백인 대시만 삽입구로 본다 (A-1, 3-4 같은 건 제외)
+_INLINE_DASH_RE = re.compile(r"\s+[—–]\s+|\s+-\s+")
 
 
 def sino_korean(n: int) -> str:
@@ -108,6 +110,17 @@ def _read_decimal(fraction: str) -> str:
     return "점 " + "".join(_SINO_DIGITS[int(d)] if d != "0" else "영" for d in fraction)
 
 
+_HANGUL_RE = re.compile(r"[가-힣]")
+
+# 수사에 붙여 읽는 게 표준인 단위 — 띄우면 없던 쉼이 생겨 오히려 어색하다
+_GLUED_UNITS = ("년", "월", "일", "분", "초", "원", "차", "층", "호", "위")
+
+# 조사는 앞말에 붙는다 — '삼 에서'가 아니라 '삼에서'.
+# '도'는 뺐다: 조사 '~도'와 단위 '온도 도'가 겹치는데, 후자를 띄우는 게 훨씬 중요하다
+# (83.4도 → '팔십삼 점 사도'는 使徒로 읽힌다).
+_PARTICLE_STARTS = ("에", "은", "는", "이", "가", "을", "를", "의", "와", "과", "로", "만")
+
+
 def _read_number(match: re.Match[str], following: str) -> str:
     integer_text = match.group(1).replace(",", "")
     fraction = match.group(2)
@@ -123,6 +136,18 @@ def _read_number(match: re.Match[str], following: str) -> str:
     out = sino_korean(value)
     if fraction:
         out += " " + _read_decimal(fraction)
+
+    # 읽은 수사가 뒤 명사에 들러붙으면 합성기가 한 단어로 읽어 발음이 무너진다.
+    # '2라운드'→'이라운드', '83.4도'→'팔십삼 점 사도'(使徒) 같은 사고를 막는다.
+    # 다만 년·월·일·시 같은 시간/화폐 단위는 붙여 읽는 게 표준이라 예외로 둔다
+    # ('이천이십육 년'처럼 띄면 없던 쉼이 생긴다).
+    if (
+        following[:1]
+        and _HANGUL_RE.match(following[0])
+        and not following.startswith(_GLUED_UNITS)
+        and not following.startswith(_PARTICLE_STARTS)
+    ):
+        out += " "
     return out
 
 
@@ -167,6 +192,9 @@ def normalize(
         text = apply_dictionary(text, dictionary)
 
     text = _RANGE_RE.sub("에서 ", text)
+    # 양옆이 띄어진 대시는 삽입구 표시다. 합성기는 이걸 어떻게 읽을지 몰라 얼버무리므로
+    # 쉼표로 바꿔 명시적인 쉼을 만든다. 단어 안 하이픈(A-1)은 건드리지 않는다.
+    text = _INLINE_DASH_RE.sub(", ", text)
     for symbol, reading in _SYMBOL_MAP.items():
         text = text.replace(symbol, reading)
 

@@ -46,7 +46,8 @@ def test_native_korean_attributive(value, expected):
 
 
 def test_decimal_is_read_digit_by_digit():
-    assert normalize_numbers("83.4도") == "팔십삼 점 사도"
+    # 붙여 쓰면 '사도'(使徒)로 읽힌다 — 단위 앞은 띄어야 한다
+    assert normalize_numbers("83.4도") == "팔십삼 점 사 도"
     assert normalize_numbers("2.25") == "이 점 이오"
 
 
@@ -57,8 +58,34 @@ def test_native_counter_uses_native_numerals():
 
 
 def test_non_counter_uses_sino_numerals():
-    assert normalize_numbers("2라운드") == "이라운드"
+    # 수사가 뒤 명사에 들러붙으면 합성기가 한 단어로 읽어 발음이 무너진다
+    assert normalize_numbers("2라운드") == "이 라운드"
+    assert normalize_numbers("6인") == "육 인"
+
+
+def test_time_units_stay_glued():
+    """년·월·일·분은 붙여 읽는 게 표준이라 띄우지 않는다 (없던 쉼이 생긴다)."""
     assert normalize_numbers("2026년") == "이천이십육년"
+    assert normalize_numbers("2026년 7월 23일") == "이천이십육년 칠월 이십삼일"
+    assert normalize_numbers("1,200원") == "천이백원"
+
+
+def test_hour_is_native_but_minute_is_sino():
+    """한국어 시간 관습 — 시는 고유어(세 시), 분은 한자어(삼십 분)."""
+    assert normalize_numbers("오후 3시 30분") == "오후 세 시 삼십분"
+
+
+def test_particles_stay_attached():
+    """조사는 앞말에 붙는다 — '삼 에서'가 아니라 '삼에서'."""
+    assert normalize_numbers("3에서 5개") == "삼에서 다섯 개"
+    assert normalize_numbers("20개를") == "스무 개를"
+
+
+def test_spaced_dash_becomes_comma():
+    """삽입구 대시는 합성기가 얼버무린다 — 쉼표로 바꿔 명시적인 쉼을 만든다."""
+    assert normalize("되기까지 — 플랫폼입니다") == "되기까지, 플랫폼입니다"
+    # 단어 안 하이픈은 건드리지 않는다
+    assert "A-" in normalize("모델 A-1 시험", read_numbers=False)
 
 
 def test_comma_grouped_numbers():
