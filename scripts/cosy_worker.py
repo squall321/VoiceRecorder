@@ -59,8 +59,17 @@ def _synthesize(request: dict) -> dict:
     prompt_path = request.get("prompt_wav") or str(_DEFAULT_PROMPT)
     prompt_text = (request.get("prompt_text") or "").strip()
 
+    instruct = (request.get("instruct") or "").strip()
+
     pieces = []
-    if prompt_text:
+    if instruct:
+        # instruct 모드 — 스타일 지시(밝게/차분하게/뉴스풍 등)로 톤을 바꾼다. 같은 음색에서 변주.
+        instruct_text = "You are a helpful assistant. " + instruct + "<|endofprompt|>"
+        for out in model.inference_instruct2(
+            request["text"], instruct_text, prompt_path, stream=False, speed=1.0
+        ):
+            pieces.append(out["tts_speech"])
+    elif prompt_text:
         # 화자 고정 경로 — 임베딩 재사용으로 씬 간 톤 일관성 확보.
         spk_id = _register_speaker(model, prompt_path, prompt_text)
         for out in model.inference_zero_shot(
