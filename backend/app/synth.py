@@ -154,6 +154,76 @@ def _render_speed(project_id: str, scene_id: str, speed: float, raw_duration: fl
         return raw_duration / max(speed, 1e-6)
 
 
+# ── 타임코드 자동 맞춤 ──────────────────────────────────────────────────────
+
+
+def _target_duration(scene: dict) -> float | None:
+    start, end = scene.get("target_start_sec"), scene.get("target_end_sec")
+    if start is None or end is None:
+        return None
+    span = end - start
+    return span if span > 0 else None
+
+
+def fit_to_timecode(project: dict, *, max_speed: float = 2.0) -> dict:
+    """각 씬을 스크립트의 타임코드 슬롯에 맞춘다.
+
+    - 낭독이 슬롯보다 짧으면: 속도 1.0 을 유지하고 뒤 무음으로 슬롯을 채운다 (자연스러움 우선).
+    - 낭독이 슬롯보다 길면: 그 씬만 속도를 올려 슬롯에 맞춘다 (max_speed 상한).
+    - max_speed 로도 안 들어가면: 속도를 상한에 두고 넘치는 씬으로 리포트한다 (원고 압축 필요).
+
+    원본 wav 를 ffmpeg 로 다시 렌더링만 하므로 모델(GPU)을 다시 돌리지 않는다.
+    무음 정렬은 절대 시각 기준이라 한 씬이 살짝 밀려도 다음 여유 씬에서 자동 회수된다.
+    """
+    over_budget: list[dict] = []
+
+    # 1) 씬별 속도 결정
+    for scene in store.list_scenes(project["id"]):
+        target = _target_duration(scene)
+        raw = scene.get("raw_duration_sec")
+        if not target or not raw:
+            continue
+        if raw > target + 0.05:
+            speed = raw / target
+            if speed > max_speed:
+                over_budget.append(
+                    {
+                        "number": scene.get("number"),
+                        "title": scene.get("title"),
+                        "target_sec": round(target, 2),
+                        "min_sec": round(raw / max_speed, 2),  # 상한 배속으로도 이 길이
+                    }
+                )
+                speed = max_speed
+            store.update_scene(scene["id"], {"speed": round(speed, 3)})
+        else:
+            store.update_scene(scene["id"], {"speed": 1.0})
+
+    for scene in store.list_scenes(project["id"]):
+        rerender_speed(project, scene)
+
+    # 2) 절대 시각 기준 무음 정렬
+    scenes = store.list_scenes(project["id"])
+    cursor: float | None = None
+    for i, scene in enumerate(scenes):
+        start_target = scene.get("target_start_sec")
+        if cursor is None:
+            cursor = start_target or 0.0
+            gap_before = int(round(cursor * 1000)) if start_target else 0
+        else:
+            gap_before = 0
+        end = cursor + (scene.get("duration_sec") or 0.0)
+        nxt = scenes[i + 1].get("target_start_sec") if i + 1 < len(scenes) else scene.get("target_end_sec")
+        if nxt is None:
+            nxt = end
+        gap_after = max(0, int(round((nxt - end) * 1000)))
+        store.update_scene(scene["id"], {"gap_before_ms": gap_before, "gap_after_ms": gap_after})
+        cursor = max(end, nxt)
+
+    store.touch_project(project["id"])
+    return {"total_sec": round(cursor or 0.0, 3), "over_budget": over_budget}
+
+
 # ── 익스포트 ────────────────────────────────────────────────────────────────
 
 

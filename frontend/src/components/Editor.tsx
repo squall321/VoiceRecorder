@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api, urls } from "../api";
 import { formatSeconds } from "../format";
-import type { Engine, Job, ProjectPayload, Voice } from "../types";
+import type { Engine, FitReport, Job, ProjectPayload, Voice } from "../types";
 import { SceneCard } from "./SceneCard";
 
 interface Props {
@@ -22,6 +22,7 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
   const [showScript, setShowScript] = useState(false);
   const [scriptDraft, setScriptDraft] = useState(project.raw_script);
   const [newSceneText, setNewSceneText] = useState("");
+  const [fitReport, setFitReport] = useState<FitReport | null>(null);
 
   const busy = job !== null && (job.status === "queued" || job.status === "running");
   const pending = scenes.filter((s) => s.status !== "ready");
@@ -29,6 +30,9 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
   const exported = job?.kind === "export" && job.status === "done";
   // 씬별로 속도를 따로 만진 씬 수 — 이 씬들은 전체 슬라이더를 따르지 않는다
   const speedOverrideCount = scenes.filter((s) => s.speed != null).length;
+  // 타임코드 자동 맞춤 가능 조건: 전 씬 합성 완료 + 모든 씬에 목표 길이 있음
+  const allReady = scenes.length > 0 && scenes.every((s) => s.status === "ready");
+  const hasTimecodes = scenes.length > 0 && scenes.every((s) => s.target_duration_sec != null);
 
   async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     try {
@@ -74,6 +78,27 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
           </button>
           <button
             className="btn"
+            disabled={busy || !allReady || !hasTimecodes}
+            title={
+              !hasTimecodes
+                ? "스크립트에 타임코드/길이가 없어 맞출 수 없습니다"
+                : !allReady
+                  ? "먼저 모든 씬의 음성을 생성하세요"
+                  : "짧은 씬은 무음으로 채우고, 넘치는 씬은 배속으로 줄여 타임코드에 맞춥니다"
+            }
+            onClick={() =>
+              run(() =>
+                api.fitTimecode(project.id).then((p) => {
+                  onPayload(p);
+                  setFitReport(p.fit_report ?? null);
+                }),
+              )
+            }
+          >
+            ⧗ 타임코드에 맞춤
+          </button>
+          <button
+            className="btn"
             disabled={busy || payload.ready_count === 0}
             onClick={() => run(() => api.exportProject(project.id).then((r) => onJob(r.job_id)))}
           >
@@ -94,6 +119,29 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
         )}
 
         {job?.status === "error" && <div className="error-banner">{job.error}</div>}
+
+        {fitReport &&
+          (fitReport.over_budget.length === 0 ? (
+            <div className="fit-banner ok">
+              ✓ 전 씬을 타임코드에 맞췄습니다 · 총 {formatSeconds(fitReport.total_sec)}
+            </div>
+          ) : (
+            <div className="fit-banner warn">
+              <div>
+                ⚠ {fitReport.over_budget.length}개 씬은 최대 배속으로도 슬롯을 넘칩니다. 원고를
+                줄이거나 슬롯을 늘려야 합니다:
+              </div>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                {fitReport.over_budget.map((o) => (
+                  <li key={o.number ?? o.title}>
+                    {String(o.number ?? "").padStart(2, "0")} {o.title} — 슬롯 {o.target_sec}s,
+                    최소 {o.min_sec}s (약 {Math.ceil(((o.min_sec - o.target_sec) / o.min_sec) * 100)}%
+                    줄여야)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
 
         {(exported || payload.ready_count > 0) && (
           <div className="btn-row" style={{ marginTop: 10 }}>

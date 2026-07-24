@@ -23,6 +23,7 @@ from .jobs import runner
 from .models import (
     ApplySpeedRequest,
     DictionaryEntryIn,
+    FitTimecodeRequest,
     ParseRequest,
     ParseResponse,
     ProjectCreate,
@@ -299,6 +300,24 @@ def apply_speed(project_id: str, payload: ApplySpeedRequest) -> dict:
     updated = _project_or_404(project_id)
     _rerender_all(updated)
     return _project_payload(updated)
+
+
+@app.post("/api/projects/{project_id}/fit-timecode")
+def fit_timecode(project_id: str, payload: FitTimecodeRequest) -> dict:
+    """전 씬을 스크립트 타임코드에 자동으로 맞춘다 (짧으면 무음, 넘치면 배속)."""
+    project = _project_or_404(project_id)
+    scenes = store.list_scenes(project_id)
+    if not scenes:
+        raise HTTPException(status_code=400, detail="씬이 없습니다")
+    if any(synth.scene_status(project, s) != "ready" for s in scenes):
+        raise HTTPException(status_code=400, detail="먼저 모든 씬의 음성을 생성하세요")
+    if not any(synth._target_duration(s) for s in scenes):
+        raise HTTPException(status_code=400, detail="타임코드가 없어 맞출 수 없습니다")
+
+    report = synth.fit_to_timecode(project, max_speed=payload.max_speed)
+    result = _project_payload(_project_or_404(project_id))
+    result["fit_report"] = report
+    return result
 
 
 @app.get("/api/projects/{project_id}/scenes/{scene_id}/audio")

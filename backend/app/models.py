@@ -85,6 +85,11 @@ class ApplySpeedRequest(BaseModel):
     speed: float = Field(ge=0.5, le=2.0)
 
 
+class FitTimecodeRequest(BaseModel):
+    # 슬롯을 넘치는 씬에 허용할 최대 배속. 이걸로도 안 되면 원고를 줄여야 한다.
+    max_speed: float = Field(default=2.0, ge=1.0, le=2.0)
+
+
 class SynthesizeRequest(BaseModel):
     # 비우면 합성이 필요한 씬(pending/stale/error)만 골라 돌린다
     scene_ids: list[str] | None = None

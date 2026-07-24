@@ -460,6 +460,23 @@ label.field {
   padding: 40px 20px;
 }
 
+.fit-banner {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.fit-banner.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.fit-banner.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
 audio {
   height: 32px;
   vertical-align: middle;

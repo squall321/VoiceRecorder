@@ -92,6 +92,13 @@ export const api = {
       body: JSON.stringify({ speed }),
     }),
 
+  // 전 씬을 스크립트 타임코드에 자동으로 맞춘다 (짧으면 무음, 넘치면 배속)
+  fitTimecode: (id: string, maxSpeed = 2.0) =>
+    request<ProjectPayload>(`api/projects/${id}/fit-timecode`, {
+      method: "POST",
+      body: JSON.stringify({ max_speed: maxSpeed }),
+    }),
+
   synthesize: (id: string, scene_ids?: string[], force = false) =>
     request<{ job_id: string; scene_count: number }>(`api/projects/${id}/synthesize`, {
       method: "POST",

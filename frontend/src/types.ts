@@ -80,12 +80,23 @@ export interface Job {
   result: Record<string, unknown> | null;
 }
 
+export interface FitReport {
+  total_sec: number;
+  over_budget: {
+    number: number | null;
+    title: string | null;
+    target_sec: number;
+    min_sec: number;
+  }[];
+}
+
 export interface ProjectPayload {
   project: Project;
   scenes: Scene[];
   total_sec: number;
   ready_count: number;
   job: Job | null;
+  fit_report?: FitReport;
 }
 
 export interface Engine {

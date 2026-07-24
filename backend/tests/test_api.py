@@ -223,6 +223,47 @@ def test_apply_speed_rejects_out_of_range(client):
     assert client.post(f"/api/projects/{pid}/apply-speed", json={"speed": 3.0}).status_code == 422
 
 
+def test_fit_timecode_aligns_scenes_to_slots(client):
+    project = _create(client)
+    pid = project["project"]["id"]
+    _synthesize(client, pid)
+
+    body = client.post(f"/api/projects/{pid}/fit-timecode", json={}).json()
+    scenes = body["scenes"]
+
+    # 스텁은 글자수×0.06초로 합성한다. SCRIPT 의 슬롯(8/11/8초)보다 짧아 무음으로 채워지고,
+    # 각 씬 시작이 타임코드 목표(0, 8, 19초)에 정확히 앉는다.
+    assert body["fit_report"]["over_budget"] == []
+    assert scenes[0]["start_sec"] == 0.0
+    assert scenes[1]["start_sec"] == pytest.approx(8.0, abs=0.05)
+    assert scenes[2]["start_sec"] == pytest.approx(19.0, abs=0.05)
+
+
+def test_fit_timecode_speeds_up_overshooting_scene(client, stub_engine):
+    # 슬롯보다 긴 씬을 만든다: 4초 슬롯에 긴 문장
+    long_text = "가나다라마바사아자차카타파하" * 4  # 스텁 기준 약 3.4초... 더 길게
+    raw = f'01 긴씬 (0:00–0:02) "{long_text}"\n\n02 짧은씬 (0:02–0:10) "짧다."'
+    pid = client.post("/api/projects", json={"title": "t", "raw_script": raw}).json()["project"]["id"]
+    _synthesize(client, pid)
+
+    calls_before = len(stub_engine.calls)
+    body = client.post(f"/api/projects/{pid}/fit-timecode", json={"max_speed": 2.0}).json()
+    first = body["scenes"][0]
+
+    # 2초 슬롯을 넘는 씬은 배속이 올라간다 (모델 재호출 없이 ffmpeg 재렌더)
+    assert first["effective_speed"] > 1.0
+    assert len(stub_engine.calls) == calls_before
+    # 2배로도 안 들어가면 over_budget 에 보고된다
+    assert isinstance(body["fit_report"]["over_budget"], list)
+
+
+def test_fit_timecode_requires_all_ready(client):
+    project = _create(client)
+    pid = project["project"]["id"]
+    # 합성 전이라 거부
+    assert client.post(f"/api/projects/{pid}/fit-timecode", json={}).status_code == 400
+
+
 def test_drift_against_script_timecode_is_reported(client):
     project = _create(client)
     pid = project["project"]["id"]
