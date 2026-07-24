@@ -33,3 +33,6 @@ data/
 .bkit/
 .koo-llm-sessions/
 .claude/settings.local.json
+
+# CosyVoice 는 별도 repo 를 clone 해서 씀 (scripts/setup-cosy.sh) — 커밋하지 않는다
+vendor/

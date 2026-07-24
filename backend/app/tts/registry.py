@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .base import TTSEngine
 from .chatterbox_engine import ChatterboxEngine
+from .cosy_engine import CosyEngine
 from .melo_engine import MeloEngine
 
 _ENGINES: dict[str, TTSEngine] = {}
@@ -11,7 +12,7 @@ _ENGINES: dict[str, TTSEngine] = {}
 
 def _registry() -> dict[str, TTSEngine]:
     if not _ENGINES:
-        for engine in (ChatterboxEngine(), MeloEngine()):
+        for engine in (ChatterboxEngine(), MeloEngine(), CosyEngine()):
             _ENGINES[engine.id] = engine
     return _ENGINES
 
