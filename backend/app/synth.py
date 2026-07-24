@@ -68,14 +68,17 @@ def scene_status(project: dict, scene: dict) -> str:
     return "ready"
 
 
-def _voice_path(voice_id: str | None) -> Path | None:
+def _voice_ref(voice_id: str | None) -> tuple[Path | None, str | None]:
+    """참조 음성의 (경로, 전사)를 돌려준다. 전사는 CosyVoice 화자 고정에 쓰인다."""
     if not voice_id:
-        return None
+        return None, None
     voice = store.get_voice(voice_id)
     if not voice:
-        return None
+        return None, None
     path = store.voice_path(voice)
-    return path if path.exists() else None
+    if not path.exists():
+        return None, None
+    return path, (voice.get("transcript") or None)
 
 
 def synthesize_scene(project: dict, scene: dict) -> None:
@@ -94,10 +97,12 @@ def synthesize_scene(project: dict, scene: dict) -> None:
 
     raw_path = config.scene_raw_path(project["id"], scene["id"])
     engine = get_engine(params["engine"])
+    voice_path, prompt_text = _voice_ref(params["voice_id"])
     request = SynthesisRequest(
         text=text,
         language=params["language"],
-        voice_path=_voice_path(params["voice_id"]),
+        voice_path=voice_path,
+        prompt_text=prompt_text,
         exaggeration=params["exaggeration"],
         cfg_weight=params["cfg_weight"],
         temperature=params["temperature"],

@@ -94,6 +94,8 @@ class CosyEngine(TTSEngine):
                 "text": request.text,
                 "out": str(out_wav),
                 "prompt_wav": str(request.voice_path) if request.voice_path else None,
+                # 전사가 있으면 워커가 화자 고정(add_zero_shot_spk)으로 씬 간 톤을 맞춘다.
+                "prompt_text": request.prompt_text or None,
             },
             ensure_ascii=False,
         )

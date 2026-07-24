@@ -112,13 +112,11 @@ export const api = {
 
   listVoices: () => request<{ voices: Voice[] }>("api/voices"),
 
-  uploadVoice: (name: string, file: File) => {
+  uploadVoice: (name: string, file: File, transcript = "") => {
     const form = new FormData();
     form.append("file", file);
-    return request<Voice>(`api/voices?name=${encodeURIComponent(name)}`, {
-      method: "POST",
-      body: form,
-    });
+    const qs = `name=${encodeURIComponent(name)}&transcript=${encodeURIComponent(transcript)}`;
+    return request<Voice>(`api/voices?${qs}`, { method: "POST", body: form });
   },
 
   deleteVoice: (voiceId: string) => request<void>(`api/voices/${voiceId}`, { method: "DELETE" }),

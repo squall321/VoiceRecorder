@@ -14,6 +14,9 @@ class SynthesisRequest:
     text: str
     language: str = "ko"
     voice_path: Path | None = None
+    # 참조 음성의 전사(무슨 말인지). CosyVoice 화자 고정(add_zero_shot_spk)에 필요하다.
+    # 비어 있으면 CosyVoice 는 cross-lingual 폴백(음색만, 씬 간 톤 변동 큼).
+    prompt_text: str | None = None
     exaggeration: float = 0.5
     cfg_weight: float = 0.5
     temperature: float = 0.8

@@ -418,7 +418,7 @@ def list_voices() -> dict:
 
 
 @app.post("/api/voices", status_code=status.HTTP_201_CREATED)
-async def upload_voice(name: str = "", file: UploadFile = File(...)) -> dict:
+async def upload_voice(name: str = "", transcript: str = "", file: UploadFile = File(...)) -> dict:
     from . import audio
 
     raw = await file.read()
@@ -444,7 +444,7 @@ async def upload_voice(name: str = "", file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail="참조 음성은 3초 이상이어야 합니다")
 
     label = (name or Path(file.filename or "voice").stem)[:80]
-    voice_id = store.create_voice(label, filename, duration)
+    voice_id = store.create_voice(label, filename, duration, transcript.strip()[:2000])
     return {"id": voice_id, "name": label, "duration_sec": duration}
 
 

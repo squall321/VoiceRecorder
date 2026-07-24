@@ -16,6 +16,7 @@ interface Props {
 export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh, onError }: Props) {
   const [voiceName, setVoiceName] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [transcript, setTranscript] = useState("");
   const [uploading, setUploading] = useState(false);
   const [source, setSource] = useState("");
   const [target, setTarget] = useState("");
@@ -32,10 +33,11 @@ export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh
   async function upload() {
     if (!file) return;
     setUploading(true);
-    await run(() => api.uploadVoice(voiceName || file.name, file));
+    await run(() => api.uploadVoice(voiceName || file.name, file, transcript));
     setUploading(false);
     setFile(null);
     setVoiceName("");
+    setTranscript("");
   }
 
   const cloningEngine = engines.find((e) => e.supports_voice_cloning && e.available);
@@ -71,6 +73,12 @@ export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh
               accept="audio/*"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
+            <textarea
+              rows={2}
+              placeholder="이 음성이 말하는 내용 (전사) — CosyVoice 화자 고정에 쓰여 씬 간 톤이 일정해집니다. 비우면 음색만 참조."
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+            />
             <button className="btn primary" onClick={upload} disabled={!file || uploading}>
               {uploading ? "올리는 중…" : "업로드"}
             </button>
@@ -79,18 +87,34 @@ export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh
           <ul className="list-plain" style={{ marginTop: 12 }}>
             {voices.length === 0 && <li style={{ color: "var(--text-dim)" }}>등록된 화자 없음</li>}
             {voices.map((voice) => (
-              <li key={voice.id}>
-                <span style={{ flex: 1 }}>
-                  {voice.name}{" "}
-                  <span className="scene-meta">{voice.duration_sec.toFixed(1)}초</span>
-                </span>
-                <audio controls preload="none" src={urls.voiceAudio(voice.id)} style={{ width: 160 }} />
-                <button
-                  className="btn icon danger"
-                  onClick={() => run(() => api.deleteVoice(voice.id))}
-                >
-                  ✕
-                </button>
+              <li key={voice.id} style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ flex: 1 }}>
+                    {voice.name}{" "}
+                    <span className="scene-meta">{voice.duration_sec.toFixed(1)}초</span>
+                    {voice.transcript ? (
+                      <span className="badge ready" style={{ marginLeft: 6 }}>
+                        화자고정
+                      </span>
+                    ) : (
+                      <span className="badge pending" style={{ marginLeft: 6 }}>
+                        음색만
+                      </span>
+                    )}
+                  </span>
+                  <audio controls preload="none" src={urls.voiceAudio(voice.id)} style={{ width: 150 }} />
+                  <button
+                    className="btn icon danger"
+                    onClick={() => run(() => api.deleteVoice(voice.id))}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {voice.transcript && (
+                  <span className="scene-meta" style={{ paddingLeft: 2 }}>
+                    “{voice.transcript.length > 50 ? voice.transcript.slice(0, 50) + "…" : voice.transcript}”
+                  </span>
+                )}
               </li>
             ))}
           </ul>

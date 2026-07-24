@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS voices (
     name              TEXT NOT NULL,
     filename          TEXT NOT NULL,
     duration_sec      REAL NOT NULL,
+    transcript        TEXT NOT NULL DEFAULT '',
     created_at        REAL NOT NULL
 );
 
@@ -126,6 +127,10 @@ def init_db() -> None:
     with write() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(_SCHEMA)
+        # 기존 DB 마이그레이션 — voices.transcript 는 나중에 추가됐다.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(voices)").fetchall()}
+        if "transcript" not in cols:
+            conn.execute("ALTER TABLE voices ADD COLUMN transcript TEXT NOT NULL DEFAULT ''")
 
 
 # ── 프로젝트 ────────────────────────────────────────────────────────────────
@@ -342,12 +347,13 @@ def compact_positions(project_id: str) -> None:
 # ── 보이스 ──────────────────────────────────────────────────────────────────
 
 
-def create_voice(name: str, filename: str, duration_sec: float) -> str:
+def create_voice(name: str, filename: str, duration_sec: float, transcript: str = "") -> str:
     voice_id = new_id()
     with write() as conn:
         conn.execute(
-            "INSERT INTO voices (id, name, filename, duration_sec, created_at) VALUES (?,?,?,?,?)",
-            (voice_id, name, filename, duration_sec, now()),
+            "INSERT INTO voices (id, name, filename, duration_sec, transcript, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (voice_id, name, filename, duration_sec, transcript, now()),
         )
     return voice_id
 

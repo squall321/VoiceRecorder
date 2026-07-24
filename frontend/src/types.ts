@@ -116,6 +116,7 @@ export interface Voice {
   name: string;
   filename: string;
   duration_sec: number;
+  transcript: string;
   created_at: number;
 }
 
