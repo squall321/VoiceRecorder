@@ -33,10 +33,11 @@ from .models import (
     ScenePatch,
     ScriptReplace,
     SynthesizeRequest,
+    TtsRequest,
 )
 from .script_parser import parse_script
 from .timeline import render_srt
-from .tts import describe_engines
+from .tts import describe_engines, get_engine
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("voicerecorder")
@@ -368,6 +369,42 @@ def get_job(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다")
     return job
+
+
+# ── 원샷 TTS (프로젝트 없이 합성 — 외부 연동용) ─────────────────────────────
+
+
+@app.post("/api/tts", status_code=status.HTTP_202_ACCEPTED)
+def oneshot_tts(payload: TtsRequest) -> dict:
+    """텍스트 하나를 바로 합성 큐에 넣는다.
+
+    WebDesignAgents 같은 외부 플랫폼이 프로젝트를 만들지 않고 내레이션 길이를
+    실측하거나 미리듣기 wav 를 얻는 용도. 완료는 GET /api/jobs/{job_id} 로 확인하며
+    result 에 duration_sec 이 들어 있고, 오디오는 GET /api/tts/{tts_id}/audio 로 받는다.
+    """
+    try:
+        get_engine(payload.engine or config.DEFAULT_ENGINE)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc.args[0])) from exc
+    if payload.voice_id and store.get_voice(payload.voice_id) is None:
+        raise HTTPException(status_code=404, detail="보이스를 찾을 수 없습니다")
+
+    job_id, tts_id = runner.submit_tts(payload.model_dump())
+    return {"job_id": job_id, "tts_id": tts_id}
+
+
+@app.get("/api/tts/{tts_id}/audio")
+def oneshot_tts_audio(tts_id: str):
+    path = config.tts_audio_path(tts_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="아직 합성되지 않았습니다")
+    return FileResponse(path, media_type="audio/wav", filename=f"{tts_id}.wav")
+
+
+@app.delete("/api/tts/{tts_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_oneshot_tts(tts_id: str) -> None:
+    config.tts_raw_path(tts_id).unlink(missing_ok=True)
+    config.tts_audio_path(tts_id).unlink(missing_ok=True)
 
 
 @app.get("/api/projects/{project_id}/export/audio")
