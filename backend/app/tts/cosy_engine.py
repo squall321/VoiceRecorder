@@ -70,8 +70,11 @@ class CosyEngine(TTSEngine):
     def _ensure_worker(self) -> subprocess.Popen:
         if self._worker is not None and self._worker.poll() is None:
             return self._worker
+        models_dir = os.environ.get("VOICEREC_MODELS_DIR", str(_REPO_ROOT / "var" / "models"))
         env = {**os.environ, "COSYVOICE_REPO": str(COSY_REPO)}
-        env.setdefault("HF_HOME", os.environ.get("VOICEREC_MODELS_DIR", str(_REPO_ROOT / "var" / "models")))
+        env.setdefault("HF_HOME", models_dir)
+        # wetext FST 캐시도 var/models 안 → Drive 전송 포함, 폐쇄망에서 modelscope.cn 재접속 불필요.
+        env.setdefault("MODELSCOPE_CACHE", str(Path(models_dir) / "modelscope"))
         self._worker = subprocess.Popen(
             [str(COSY_PYTHON), str(COSY_WORKER)],
             stdin=subprocess.PIPE,

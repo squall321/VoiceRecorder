@@ -92,29 +92,53 @@ PORT=8000 ROOT_PATH=/apps/voice_recorder \
 # http://localhost:8000/ 에서 SPA + /api/* 가 함께 동작
 ```
 
-## HEAXHub 등록
+## HEAXHub 연합 등록 (재부팅 자동 기동)
 
-```bash
-# HEAXHub 리포에 포인터만 두고 소스는 이 리포에서 가져간다
-HEAXHub/integrations/voice-recorder/.portal/manifest.yaml
+VoiceRecorder 는 torch(cu130)+Chatterbox 메인 venv 와 CosyVoice 사이드카(.venv-cosy)를 쓰는
+무거운 앱이라 HEAXHub 표준 SIF 빌드에 안 담긴다. 그래서 heax-hub 안의 앱이 아니라
+**자체 venv 로 도는 독립 서비스**로 등록한다 (MXWhitePaper 방식).
+
+```yaml
+# HWAXPortal/infra/services.yaml
+- name: voice-recorder
+  host: local
+  discover: VoiceRecorder
+  start: ./scripts/serve.sh          # 오프라인 env 세팅 + uvicorn :8177
+  health: http://localhost:8177/api/health
+  tier: 10
 ```
 
-`build.stack: fastapi_react` 라서 포탈이 `pnpm build` + `pip install` 을 한 SIF 로 묶고
-`/apps/voice_recorder/` 에 서빙한다. `health_check.path` (`/api/health`) 가 200 을 주면 시작된다.
+재부팅하면 `hwax-stack.service`(linger)가 `services.py up` 으로 다른 서비스들과 함께 자동
+기동한다. 수동 기동/재기동은 `HWAXPortal` 에서
+`backend/.venv/bin/python infra/scripts/services.py up voice-recorder`.
 
-### 폐쇄망(cae00) 배포
+## 폐쇄망(cae00) 배포 — Drive 파이프라인
 
-운영 서버는 HuggingFace·PyPI·DockerHub 에 못 닿는다. 가중치(~3GB)는 git 에 못 넣으므로
-HEAXHub 가 이미 쓰는 **rclone Google Drive remote 를 그대로 재사용**한다.
+운영 서버는 HuggingFace·PyPI·DockerHub·modelscope 에 못 닿는다. 앱이 의존하는 큰 데이터는
+전부 git 밖(`.gitignore`)이라, HEAXHub 가 이미 쓰는 **rclone Google Drive remote 를 재사용**해
+실어 나른다 (`HEAX_DRIVE_REMOTE`, `models/`·`app-data/` 하위 폴더).
+
+| 데이터 | 크기 | 온라인 → Drive | Drive → 폐쇄망 |
+|---|---|---|---|
+| 모델 가중치 (Chatterbox·CosyVoice3·MeloTTS) + **wetext FST** | ~13GB | `models-to-drive.sh` | `models-from-drive.sh` |
+| 운영 데이터 (프로젝트 DB + 생성 오디오) | 가변 | `data-to-drive.sh` | `data-from-drive.sh` |
+| 코드 | — | `git push` | `git clone` |
+| venv (메인+사이드카) | ~15GB | — (플랫폼 종속) | `setup-backend.sh`+`setup-cosy.sh` (사내 pip 미러) |
 
 ```bash
-scripts/models-to-drive.sh      # (온라인)  var/models → <remote>:HEAXHub/models/voice_recorder/
-scripts/models-from-drive.sh    # (폐쇄망)  Drive → var/models
+# ── 온라인 스테이징 ──
+scripts/fetch-models.sh      # 세 엔진 가중치 + wetext 를 var/models 로 원스톱 조달
+scripts/models-to-drive.sh   # var/models (모델+wetext) → Drive
+scripts/data-to-drive.sh     # var/data (DB 는 sqlite .backup 원자 스냅샷 + tar) → Drive
+
+# ── 폐쇄망 서버 ──
+scripts/deploy-from-drive.sh # 모델+wetext+운영데이터 원스톱 복원 (내부적으로 models/data-from-drive)
+scripts/setup-backend.sh && scripts/setup-cosy.sh   # venv (사내 pip 미러)
 ```
 
-매니페스트가 `HF_HOME=/data/models`, `HF_HUB_OFFLINE=1` 을 주입해 런타임이 네트워크를 아예
-타지 않는다. HEAXHub 가 `/data` 에 `var/app_data/voice_recorder/` 를 바인드하므로
-**DB·생성 음성·모델이 재빌드·재스캔 뒤에도 남는다** (SIF rootfs 는 read-only 라 여기 외엔 못 쓴다).
+`serve.sh` 가 `HF_HUB_OFFLINE=1`, `HF_HOME=var/models`, `MODELSCOPE_CACHE=var/models/modelscope`
+를 세팅해 런타임이 네트워크를 아예 타지 않는다. wetext FST 를 `var/models` 안에 두는 이유가
+이것 — 모델 Drive 전송에 함께 실려 폐쇄망에서 modelscope.cn 재접속이 필요 없다.
 
 ## API
 

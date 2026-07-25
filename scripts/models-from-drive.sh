@@ -8,7 +8,7 @@ MODELS_DIR="${VOICEREC_MODELS_DIR:-$ROOT_DIR/var/models}"
 
 env_get() {
   local file="$1" key="$2"
-  [ -f "$file" ] && sed -n "s/^$key=//p" "$file" | tail -1 | sed 's/^["'"'"']//; s/["'"'"']$//'
+  [ -f "$f" ] || return 0; sed -n "s/^$key=//p" "$file" | tail -1 | sed 's/^["'"'"']//; s/["'"'"']$//'
 }
 
 REMOTE="${HEAX_DRIVE_REMOTE:-}"

@@ -17,6 +17,9 @@ export VOICEREC_MODELS_DIR="${VOICEREC_MODELS_DIR:-$ROOT/var/models}"
 export VOICEREC_DATA_DIR="${VOICEREC_DATA_DIR:-$ROOT/var/data}"
 # CosyVoice 사이드카 워커가 참조하는 repo 경로.
 export COSYVOICE_REPO="${COSYVOICE_REPO:-$ROOT/vendor/CosyVoice}"
+# wetext(텍스트 정규화)의 modelscope FST 캐시도 var/models 안에 둔다 → Drive 전송에 함께 포함되고
+# 폐쇄망에서 modelscope.cn 재접속이 필요 없다.
+export MODELSCOPE_CACHE="${MODELSCOPE_CACHE:-$ROOT/var/models/modelscope}"
 
 PORT="${VOICEREC_PORT:-8177}"
 # 오케스트레이터가 detach 하므로 foreground 로 exec (Chatterbox 는 GPU 여유 없으면 CPU 폴백).
