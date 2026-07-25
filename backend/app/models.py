@@ -96,6 +96,19 @@ class SynthesizeRequest(BaseModel):
     force: bool = False
 
 
+class TtsRequest(BaseModel):
+    # 프로젝트 없이 텍스트 하나를 바로 합성한다 — 외부 연동(길이 실측·미리듣기)용
+    text: str = Field(min_length=1, max_length=20_000)
+    engine: str | None = None
+    language: str | None = None
+    voice_id: str | None = None
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    read_numbers: bool = True
+    exaggeration: float = Field(default=0.5, ge=0.0, le=2.0)
+    cfg_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    temperature: float = Field(default=0.8, ge=0.05, le=2.0)
+
+
 class DictionaryEntryIn(BaseModel):
     source: str = Field(min_length=1, max_length=200)
     target: str = Field(min_length=1, max_length=400)

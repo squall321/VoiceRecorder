@@ -26,6 +26,7 @@ DB_PATH = DATA_DIR / "voicerecorder.db"
 PROJECTS_DIR = DATA_DIR / "projects"
 VOICES_DIR = DATA_DIR / "voices"
 UPLOADS_DIR = DATA_DIR / "uploads"
+TTS_DIR = DATA_DIR / "tts"
 
 # 모델 가중치는 리포에 넣지 않는다 (Drive 경유, scripts/models-*-drive.sh).
 # 폐쇄망에서는 HF_HUB_OFFLINE=1 로 네트워크를 아예 안 타게 막는다.
@@ -46,7 +47,7 @@ MAX_VOICE_UPLOAD_BYTES = int(os.environ.get("VOICEREC_MAX_VOICE_BYTES", str(20 *
 
 
 def ensure_dirs() -> None:
-    for path in (DATA_DIR, PROJECTS_DIR, VOICES_DIR, UPLOADS_DIR, MODELS_DIR):
+    for path in (DATA_DIR, PROJECTS_DIR, VOICES_DIR, UPLOADS_DIR, MODELS_DIR, TTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -70,3 +71,13 @@ def export_mp3_path(project_id: str) -> Path:
 
 def export_srt_path(project_id: str) -> Path:
     return project_dir(project_id) / "export" / "narration.srt"
+
+
+def tts_raw_path(tts_id: str) -> Path:
+    """원샷 TTS 의 원본 wav — 속도 조절 전."""
+    return TTS_DIR / f"{tts_id}.raw.wav"
+
+
+def tts_audio_path(tts_id: str) -> Path:
+    """원샷 TTS 의 최종 wav — 속도까지 반영, 다운로드가 쓰는 파일."""
+    return TTS_DIR / f"{tts_id}.wav"

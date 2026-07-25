@@ -12,12 +12,17 @@ from . import store, synth
 log = logging.getLogger("voicerecorder.jobs")
 
 
+# 원샷 TTS 잡은 프로젝트가 없다 — jobs.project_id 는 FK 가 아니라 이 센티널을 쓴다
+ONESHOT_PROJECT_ID = "_tts"
+
+
 @dataclass
 class _Task:
     job_id: str
     project_id: str
-    kind: str  # synthesize | export
+    kind: str  # synthesize | export | tts
     scene_ids: list[str] = field(default_factory=list)
+    payload: dict = field(default_factory=dict)
 
 
 class JobRunner:
@@ -58,6 +63,13 @@ class JobRunner:
         self._queue.put(_Task(job_id, project_id, "export"))
         return job_id
 
+    def submit_tts(self, payload: dict) -> tuple[str, str]:
+        """원샷 TTS — GPU 직렬화를 위해 같은 큐를 태운다. (job_id, tts_id) 반환."""
+        tts_id = store.new_id()
+        job_id = store.create_job(ONESHOT_PROJECT_ID, "tts", 1)
+        self._queue.put(_Task(job_id, ONESHOT_PROJECT_ID, "tts", payload={**payload, "tts_id": tts_id}))
+        return job_id, tts_id
+
     # ── 실행 ────────────────────────────────────────────────────────────────
 
     def _loop(self) -> None:
@@ -75,6 +87,10 @@ class JobRunner:
 
     def _run(self, task: _Task) -> None:
         store.update_job(task.job_id, status="running", done=0)
+        if task.kind == "tts":
+            self._run_tts(task)
+            return
+
         project = store.get_project(task.project_id)
         if project is None:
             store.update_job(task.job_id, status="error", error="프로젝트가 없습니다")
@@ -110,6 +126,10 @@ class JobRunner:
             error="\n".join(failures)[:1000] if failures else None,
             result={"failed": len(failures), "total": len(task.scene_ids)},
         )
+
+    def _run_tts(self, task: _Task) -> None:
+        result = synth.synthesize_oneshot(task.payload["tts_id"], task.payload)
+        store.update_job(task.job_id, status="done", done=1, current=None, result=result)
 
     def _run_export(self, task: _Task, project: dict) -> None:
         def progress(done: int, total: int) -> None:

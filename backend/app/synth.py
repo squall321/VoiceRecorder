@@ -130,6 +130,52 @@ def synthesize_scene(project: dict, scene: dict) -> None:
     )
 
 
+def synthesize_oneshot(tts_id: str, params: dict) -> dict:
+    """프로젝트 없이 텍스트 하나를 합성한다 — 외부 연동(길이 실측·미리듣기)용.
+
+    씬 합성과 같은 정규화(발음 사전·숫자 낭독)·엔진 경로를 타되, DB 에 아무것도
+    남기지 않고 TTS_DIR 아래 파일만 만든다. 정리는 호출자(DELETE /api/tts/{id}) 몫.
+    """
+    text = normalize(
+        params["text"],
+        dictionary=store.dictionary_pairs(),
+        read_numbers=bool(params.get("read_numbers", True)),
+    )
+    if not text.strip():
+        raise ValueError("텍스트가 비어 있습니다")
+
+    engine = get_engine(params.get("engine") or config.DEFAULT_ENGINE)
+    voice_path, prompt_text = _voice_ref(params.get("voice_id"))
+    request = SynthesisRequest(
+        text=text,
+        language=params.get("language") or config.DEFAULT_LANGUAGE,
+        voice_path=voice_path,
+        prompt_text=prompt_text,
+        exaggeration=float(params.get("exaggeration", 0.5)),
+        cfg_weight=float(params.get("cfg_weight", 0.5)),
+        temperature=float(params.get("temperature", 0.8)),
+    )
+
+    raw_path = config.tts_raw_path(tts_id)
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_duration = engine.synthesize(request, raw_path)
+
+    speed = float(params.get("speed") or 1.0)
+    out_path = config.tts_audio_path(tts_id)
+    audio.apply_speed(raw_path, out_path, speed)
+    try:
+        duration = audio.probe_duration(out_path)
+    except audio.AudioError:
+        duration = raw_duration / max(speed, 1e-6)
+
+    return {
+        "tts_id": tts_id,
+        "raw_duration_sec": round(raw_duration, 3),
+        "duration_sec": round(duration, 3),
+        "char_count": len(text),
+    }
+
+
 def rerender_speed(project: dict, scene: dict) -> bool:
     """속도만 바뀐 경우 — 모델을 다시 돌리지 않고 ffmpeg 로 원본을 다시 렌더링한다."""
     raw_path = config.scene_raw_path(project["id"], scene["id"])
