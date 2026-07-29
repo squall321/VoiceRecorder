@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# HEAX 연합 오케스트레이터(HWAXPortal services.yaml)가 부르는 시작 스크립트 — 백엔드를 :8177 로 띄운다.
-# MXWhitePaper·MaterialTwinWeb 처럼 재부팅 시 hwax-stack.service(linger)가 자동 기동한다.
+# 로컬 개발용 편의 실행 스크립트 — 호스트 venv 로 백엔드를 :8177 에 띄운다.
 #
-# VoiceRecorder 는 torch(cu130)+Chatterbox 메인 venv 와 CosyVoice 사이드카(.venv-cosy)를 쓰는
-# 무거운 앱이라 HEAXHub SIF 표준 빌드에 안 담긴다. 그래서 heax-hub 안의 앱이 아니라
-# 자체 venv 로 도는 독립 서비스로 등록한다 (mx-white-paper 방식).
+# ⚠ HEAX 연동/배포는 이 스크립트가 아니다. 다른 HEAX 앱과 똑같이 HEAXHub 가 SIF 로 빌드·서빙한다
+# (integrations/voice-recorder/, /apps/voice_recorder/). torch+Chatterbox 와 MeloTTS/CosyVoice
+# 사이드카는 fastapi_react.def Stage3 훅(scripts/heaxhub-build.sh)이 컨테이너에 심고, 가중치는
+# /data 볼륨으로 나른다. 이 파일은 SIF 없이 로컬에서 빠르게 돌려볼 때만 쓴다.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
