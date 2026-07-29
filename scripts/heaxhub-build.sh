@@ -71,14 +71,17 @@ uv python install 3.10
 echo "→ [heaxhub-build] (2/3) MeloTTS 사이드카 venv"
 cd /app/backend
 uv venv --python 3.10 .venv-melo
-.venv-melo/bin/python -m pip install --no-cache-dir --upgrade pip
-.venv-melo/bin/pip install --no-cache-dir git+https://github.com/myshell-ai/MeloTTS.git
+# uv venv 는 --seed 없이는 pip 를 venv 에 안 넣는다(bin/pip 부재). CosyVoice 섹션처럼
+# `uv pip install`(VIRTUAL_ENV 지정)로 설치해 venv 내부 pip 를 요구하지 않게 한다.
+MELO_PIP=(env "VIRTUAL_ENV=/app/backend/.venv-melo" uv pip install)
+"${MELO_PIP[@]}" git+https://github.com/myshell-ai/MeloTTS.git
 # unidic 사전(형태소 분석) — 런타임 다운로드가 없도록 빌드 때 내장(수백 MB, 코드/데이터라 SIF).
+# 인터프리터는 존재하므로 `python -m unidic` 은 그대로 유효.
 .venv-melo/bin/python -m unidic download
 # librosa 0.9.1 이 pkg_resources 를 쓰는데 setuptools 81+ 가 제거 → 핀 없으면 런타임 ModuleNotFoundError.
-.venv-melo/bin/pip install --no-cache-dir "setuptools<81"
+"${MELO_PIP[@]}" "setuptools<81"
 # 한국어 g2p 가 런타임에 설치를 시도 → 폐쇄망 대비 미리 넣는다.
-.venv-melo/bin/pip install --no-cache-dir python-mecab-ko || echo "  ⚠ python-mecab-ko 설치 실패(런타임 자동설치에 의존)"
+"${MELO_PIP[@]}" python-mecab-ko || echo "  ⚠ python-mecab-ko 설치 실패(런타임 자동설치에 의존)"
 
 # ════════════════════════════════════════════════════════════════════════════
 # 3) CosyVoice3 — /app/vendor/CosyVoice(repo) + /app/backend/.venv-cosy (python 3.10, CPU)
