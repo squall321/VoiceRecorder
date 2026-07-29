@@ -27,11 +27,14 @@ TORCH_INDEX="${VOICEREC_TORCH_INDEX:-https://download.pytorch.org/whl/cu130}"
 # uv 가 받는 사이드카용 python 3.10 을 예측 가능한(=SIF 에 확실히 구워지는) 경로에 둔다.
 export UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
-# git 은 CosyVoice repo clone 에 필요. python:3.12-slim 에 없을 수 있어 보강.
-if ! command -v git >/dev/null 2>&1; then
-  apt-get update && apt-get install -y --no-install-recommends git ca-certificates
-  rm -rf /var/lib/apt/lists/*
-fi
+# python:3.12-slim 에 없는 빌드 전제:
+#   - git: CosyVoice repo clone
+#   - build-essential(g++/gcc/make): CosyVoice 의존성 중 pyworld==0.3.4 는 Cython/C++ 확장이라
+#     소스 빌드에 컴파일러가 필요하다(개발 호스트엔 gcc 가 있어 통과했지만 슬림 컨테이너엔 없다 →
+#     "command 'c++' failed: No such file or directory" 로 빌드 중단).
+apt-get update
+apt-get install -y --no-install-recommends git ca-certificates build-essential
+rm -rf /var/lib/apt/lists/*
 
 # ════════════════════════════════════════════════════════════════════════════
 # 1) Chatterbox — 컨테이너 system python(3.12)
