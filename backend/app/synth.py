@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import audio, config, store
-from .textnorm import normalize
+from .textnorm import latin_words, normalize
 from .timeline import build_timeline, render_srt
 from .tts import SynthesisRequest, get_engine
 
@@ -36,6 +36,7 @@ def normalized_text(project: dict, scene: dict) -> str:
     return normalize(
         scene["text"],
         dictionary=store.dictionary_pairs(),
+        reading=scene.get("reading"),
         read_numbers=bool(project["read_numbers"]),
         language=project["language"],
     )
@@ -287,6 +288,7 @@ def scene_view(project: dict, scene: dict) -> dict:
     if scene.get("target_start_sec") is not None and scene.get("target_end_sec") is not None:
         span = scene["target_end_sec"] - scene["target_start_sec"]
         target = span if span > 0 else None
+    spoken = normalized_text(project, scene)
     return {
         **scene,
         **{f"effective_{k}": v for k, v in params.items()},
@@ -294,7 +296,9 @@ def scene_view(project: dict, scene: dict) -> dict:
         "gap_after_ms": params["gap_after_ms"],
         "target_duration_sec": target,
         "status": scene_status(project, scene),
-        "normalized_text": normalized_text(project, scene),
+        "normalized_text": spoken,
+        # 정규화 뒤에도 남은 영문 — 한국어 합성기가 건너뛸 수 있어 화면에서 읽는 법을 적게 한다
+        "unread_latin": latin_words(spoken) if project["language"] == "ko" else [],
     }
 
 

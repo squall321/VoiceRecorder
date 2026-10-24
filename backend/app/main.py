@@ -132,6 +132,7 @@ def parse(payload: ParseRequest) -> ParseResponse:
                 "target_end_sec": s.target_end_sec,
                 "target_duration_sec": s.target_duration_sec,
                 "char_count": len(s.text),
+                "reading": s.reading,
             }
             for s in result.scenes
         ],
@@ -154,20 +155,22 @@ def create_project(payload: ProjectCreate) -> dict:
 
     title = payload.title.strip() or (parsed.scenes[0].title or parsed.scenes[0].text[:30])
     project_id = store.create_project(**{**payload.model_dump(), "title": title})
-    store.replace_scenes(
-        project_id,
-        [
-            {
-                "number": s.number,
-                "title": s.title,
-                "text": s.text,
-                "target_start_sec": s.target_start_sec,
-                "target_end_sec": s.target_end_sec,
-            }
-            for s in parsed.scenes
-        ],
-    )
+    store.replace_scenes(project_id, _scene_rows(parsed.scenes))
     return _project_payload(_project_or_404(project_id))
+
+
+def _scene_rows(parsed_scenes) -> list[dict]:
+    return [
+        {
+            "number": s.number,
+            "title": s.title,
+            "text": s.text,
+            "reading": s.reading,
+            "target_start_sec": s.target_start_sec,
+            "target_end_sec": s.target_end_sec,
+        }
+        for s in parsed_scenes
+    ]
 
 
 @app.get("/api/projects/{project_id}")
@@ -198,19 +201,7 @@ def replace_script(project_id: str, payload: ScriptReplace) -> dict:
     shutil.rmtree(config.project_dir(project_id) / "scenes", ignore_errors=True)
 
     store.update_project(project_id, {"raw_script": payload.raw_script})
-    store.replace_scenes(
-        project_id,
-        [
-            {
-                "number": s.number,
-                "title": s.title,
-                "text": s.text,
-                "target_start_sec": s.target_start_sec,
-                "target_end_sec": s.target_end_sec,
-            }
-            for s in parsed.scenes
-        ],
-    )
+    store.replace_scenes(project_id, _scene_rows(parsed.scenes))
     return _project_payload(_project_or_404(project["id"]))
 
 
@@ -248,6 +239,8 @@ def patch_scene(project_id: str, scene_id: str, payload: ScenePatch) -> dict:
     patch = payload.model_dump(exclude_unset=True, exclude={"reset"})
     for field in payload.reset or []:
         patch[field] = None
+    if "reading" in patch and not (patch["reading"] or "").strip():
+        patch["reading"] = None
 
     speed_changed = "speed" in patch and patch["speed"] != scene.get("speed")
     text_changed = "text" in patch and patch["text"] != scene["text"]

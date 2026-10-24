@@ -18,6 +18,7 @@ class ParsedSceneOut(BaseModel):
     target_end_sec: float | None = None
     target_duration_sec: float | None = None
     char_count: int
+    reading: str | None = None
 
 
 class ParseResponse(BaseModel):
@@ -58,6 +59,8 @@ class ScriptReplace(BaseModel):
 
 class ScenePatch(BaseModel):
     text: str | None = Field(default=None, max_length=20_000)
+    # 읽는 법 — 'AI → 에이아이 · 6만 → 육만'. 자막(text)은 두고 합성 소리만 바꾼다. 빈 문자열이면 지운다.
+    reading: str | None = Field(default=None, max_length=4_000)
     title: str | None = Field(default=None, max_length=200)
     voice_id: str | None = None
     speed: float | None = Field(default=None, ge=0.5, le=2.0)

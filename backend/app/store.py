@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS scenes (
     number            INTEGER,
     title             TEXT,
     text              TEXT NOT NULL,
+    reading           TEXT,
     target_start_sec  REAL,
     target_end_sec    REAL,
     voice_id          TEXT,
@@ -131,6 +132,10 @@ def init_db() -> None:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(voices)").fetchall()}
         if "transcript" not in cols:
             conn.execute("ALTER TABLE voices ADD COLUMN transcript TEXT NOT NULL DEFAULT ''")
+        # scenes.reading(씬별 읽는 법)은 음성 씌우기 때 추가됐다.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(scenes)").fetchall()}
+        if "reading" not in cols:
+            conn.execute("ALTER TABLE scenes ADD COLUMN reading TEXT")
 
 
 # ── 프로젝트 ────────────────────────────────────────────────────────────────
@@ -226,6 +231,7 @@ _SCENE_FIELDS = (
     "number",
     "title",
     "text",
+    "reading",
     "target_start_sec",
     "target_end_sec",
     "voice_id",

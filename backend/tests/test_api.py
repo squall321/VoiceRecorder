@@ -438,3 +438,55 @@ def test_unknown_project_is_404(client):
 def test_empty_script_is_rejected(client):
     response = client.post("/api/projects", json={"title": "빈", "raw_script": "   "})
     assert response.status_code == 400
+
+
+# ── 씬별 읽는 법 ────────────────────────────────────────────────────────────
+
+READING_SCRIPT = """| 번호 | 시간 | 대본 | 읽는 법 |
+|---|---|---|---|
+| 1 | 0:00 ~ 0:05 | AI가 6만 건을 정리했습니다. | AI → 에이아이 · 6만 → 육만 |
+| 2 | 0:05 ~ 0:09 | Brew Lab 결과입니다. | |
+"""
+
+
+def test_reading_from_script_drives_synthesis_but_not_subtitles(client, stub_engine):
+    body = client.post("/api/projects", json={"title": "읽는 법", "raw_script": READING_SCRIPT}).json()
+    first, second = body["scenes"]
+
+    assert first["reading"] == "AI → 에이아이 · 6만 → 육만"
+    assert first["text"] == "AI가 6만 건을 정리했습니다."  # 자막은 원문 그대로
+    assert first["normalized_text"] == "에이아이가 육만 건을 정리했습니다."
+    assert first["unread_latin"] == []
+    # 규칙으로 못 읽는 영문은 남은 채로 알려 준다
+    assert second["unread_latin"] == ["Brew", "Lab"]
+
+    pid = body["project"]["id"]
+    _synthesize(client, pid)
+    assert stub_engine.calls[0].text == "에이아이가 육만 건을 정리했습니다."
+    srt = client.get(f"/api/projects/{pid}/export/srt").text
+    assert "AI가 6만 건을 정리했습니다." in srt
+
+
+def test_patching_reading_marks_scene_stale_and_blank_clears_it(client):
+    body = client.post("/api/projects", json={"title": "읽는 법", "raw_script": READING_SCRIPT}).json()
+    pid = body["project"]["id"]
+    _synthesize(client, pid)
+    second = body["scenes"][1]
+
+    patched = client.patch(
+        f"/api/projects/{pid}/scenes/{second['id']}", json={"reading": "Brew Lab → 브루 랩"}
+    ).json()
+    scene = next(s for s in patched["scenes"] if s["id"] == second["id"])
+    assert scene["status"] == "stale"
+    assert scene["normalized_text"] == "브루 랩 결과입니다."
+    assert scene["unread_latin"] == []
+
+    cleared = client.patch(f"/api/projects/{pid}/scenes/{second['id']}", json={"reading": "  "}).json()
+    scene = next(s for s in cleared["scenes"] if s["id"] == second["id"])
+    assert scene["reading"] is None
+
+
+def test_parse_endpoint_includes_reading(client):
+    body = client.post("/api/scripts/parse", json={"raw_script": READING_SCRIPT}).json()
+    assert body["scenes"][0]["reading"] == "AI → 에이아이 · 6만 → 육만"
+    assert body["scenes"][1]["reading"] is None
