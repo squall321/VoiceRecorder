@@ -20,7 +20,7 @@ ONESHOT_PROJECT_ID = "_tts"
 class _Task:
     job_id: str
     project_id: str
-    kind: str  # synthesize | export | tts
+    kind: str  # synthesize | export | dub | tts
     scene_ids: list[str] = field(default_factory=list)
     payload: dict = field(default_factory=dict)
 
@@ -63,6 +63,12 @@ class JobRunner:
         self._queue.put(_Task(job_id, project_id, "export"))
         return job_id
 
+    def submit_dub(self, project_id: str, scene_ids: list[str], options: dict) -> str:
+        """음성 씌우기 — 미생성 씬 합성(scene_ids) → 배치 → 먹싱을 한 작업으로. 진행 = 씬 수 + 2단계."""
+        job_id = store.create_job(project_id, "dub", len(scene_ids) + 2)
+        self._queue.put(_Task(job_id, project_id, "dub", scene_ids, payload=options))
+        return job_id
+
     def submit_tts(self, payload: dict) -> tuple[str, str]:
         """원샷 TTS — GPU 직렬화를 위해 같은 큐를 태운다. (job_id, tts_id) 반환."""
         tts_id = store.new_id()
@@ -100,10 +106,13 @@ class JobRunner:
             self._run_synthesis(task, project)
         elif task.kind == "export":
             self._run_export(task, project)
+        elif task.kind == "dub":
+            self._run_dub(task, project)
         else:
             store.update_job(task.job_id, status="error", error=f"알 수 없는 작업: {task.kind}")
 
-    def _run_synthesis(self, task: _Task, project: dict) -> None:
+    def _synthesize_scenes(self, task: _Task, project: dict) -> list[str]:
+        """task.scene_ids 를 차례로 합성하고 실패 사유 목록을 돌려준다."""
         failures: list[str] = []
         for done, scene_id in enumerate(task.scene_ids):
             scene = store.get_scene(scene_id)
@@ -116,8 +125,32 @@ class JobRunner:
             except Exception as exc:  # noqa: BLE001 - 한 씬이 실패해도 나머지는 계속한다
                 log.warning("씬 합성 실패 %s: %s", scene_id, exc)
                 failures.append(f"{scene['position'] + 1}번: {exc}")
-
         store.touch_project(project["id"])
+        return failures
+
+    def _run_dub(self, task: _Task, project: dict) -> None:
+        failures = self._synthesize_scenes(task, project)
+        if failures:
+            store.update_job(
+                task.job_id,
+                status="error",
+                current=None,
+                error=("음성 생성에 실패한 씬이 있어 영상을 만들지 않았습니다\n" + "\n".join(failures))[:1000],
+            )
+            return
+
+        synthesized = len(task.scene_ids)
+
+        def progress(step: int, label: str) -> None:
+            store.update_job(task.job_id, done=synthesized + step - 1, current=label)
+
+        result = synth.dub_project(
+            project, original_volume=float(task.payload.get("original_volume") or 0.0), progress=progress
+        )
+        store.update_job(task.job_id, status="done", done=synthesized + 2, current=None, result=result)
+
+    def _run_synthesis(self, task: _Task, project: dict) -> None:
+        failures = self._synthesize_scenes(task, project)
         store.update_job(
             task.job_id,
             status="error" if len(failures) == len(task.scene_ids) and failures else "done",

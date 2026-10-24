@@ -10,20 +10,23 @@ HEAXHub fastapi_react 스택 규약을 따른다:
 from __future__ import annotations
 
 import logging
+import mimetypes
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
-from . import config, store, synth
+from . import config, store, synth, video
 from .jobs import runner
 from .models import (
     ApplySpeedRequest,
     DictionaryEntryIn,
+    DubRequest,
     FitTimecodeRequest,
     ParseRequest,
     ParseResponse,
@@ -98,6 +101,8 @@ def _project_payload(project: dict) -> dict:
         "total_sec": round(timeline.total_sec, 3),
         "ready_count": sum(1 for s in scenes if s["status"] == "ready"),
         "job": store.latest_job(project["id"]),
+        "video": video.read_meta(project["id"]),
+        "dub": synth.dub_info(project, views),
     }
 
 
@@ -355,6 +360,113 @@ def export(project_id: str) -> dict:
     if not ready:
         raise HTTPException(status_code=400, detail="합성된 씬이 없습니다")
     return {"job_id": runner.submit_export(project_id)}
+
+
+# ── 음성 씌우기 (영상 더빙) ─────────────────────────────────────────────────
+
+
+def _dub_running(project_id: str) -> bool:
+    job = store.latest_job(project_id)
+    return bool(job and job["kind"] == "dub" and job["status"] in ("queued", "running"))
+
+
+@app.put("/api/projects/{project_id}/video")
+async def upload_video(project_id: str, request: Request, filename: str = "") -> dict:
+    """영상 업로드 — 요청 바디(원본 바이트)를 그대로 /data 아래로 흘려 쓴다.
+
+    multipart 는 Starlette 가 먼저 임시 파일로 스풀하는데 SIF rootfs 는 read-only 이고 영상은
+    수백 MB 라 쓰지 않는다. 파일 이름은 ?filename= 으로 받는다(확장자로 저장 형식을 정한다).
+    """
+    _project_or_404(project_id)
+    if _dub_running(project_id):
+        raise HTTPException(status_code=409, detail="음성 입히는 작업이 끝난 뒤에 영상을 바꾸세요")
+
+    suffix = "".join(c for c in Path(filename).suffix.lower() if c.isalnum() or c == ".")[:10] or ".mp4"
+    # 영상 폴더 밖(같은 /data 파일시스템)에 받는다 — store_upload 가 이전 영상 폴더를 통째로 지운다
+    config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    upload = config.UPLOADS_DIR / f"video-{store.new_id()}{suffix}"
+    size = 0
+    try:
+        with upload.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > config.MAX_VIDEO_UPLOAD_BYTES:
+                    limit_gb = config.MAX_VIDEO_UPLOAD_BYTES / 1024**3
+                    raise HTTPException(status_code=413, detail=f"영상이 너무 큽니다 ({limit_gb:.0f}GB 이하)")
+                fh.write(chunk)
+        if size == 0:
+            raise HTTPException(status_code=400, detail="빈 파일입니다")
+        try:
+            # ffprobe·파일 이동은 블로킹이라 이벤트 루프 밖에서 돌린다
+            await run_in_threadpool(video.store_upload, project_id, upload, filename or f"video{suffix}")
+        except video.VideoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        upload.unlink(missing_ok=True)
+    return _project_payload(_project_or_404(project_id))
+
+
+@app.get("/api/projects/{project_id}/video")
+def get_video(project_id: str):
+    _project_or_404(project_id)
+    path = video.source_path(project_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="올린 영상이 없습니다")
+    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type)
+
+
+@app.delete("/api/projects/{project_id}/video")
+def delete_video(project_id: str) -> dict:
+    _project_or_404(project_id)
+    if _dub_running(project_id):
+        raise HTTPException(status_code=409, detail="음성 입히는 작업이 끝난 뒤에 지우세요")
+    video.remove(project_id)
+    return _project_payload(_project_or_404(project_id))
+
+
+@app.post("/api/projects/{project_id}/dub", status_code=status.HTTP_202_ACCEPTED)
+def dub(project_id: str, payload: DubRequest) -> dict:
+    """음성 입힌 영상 만들기 — 아직 음성이 없는(또는 바뀐) 씬부터 합성한 뒤 배치·먹싱한다."""
+    project = _project_or_404(project_id)
+    if video.read_meta(project_id) is None:
+        raise HTTPException(status_code=400, detail="먼저 영상을 올리세요")
+    scenes = store.list_scenes(project_id)
+    if not scenes:
+        raise HTTPException(status_code=400, detail="씬이 없습니다")
+    if _dub_running(project_id):
+        raise HTTPException(status_code=409, detail="이미 만드는 중입니다")
+    pending = [s["id"] for s in scenes if synth.scene_status(project, s) != "ready"]
+    job_id = runner.submit_dub(project_id, pending, payload.model_dump())
+    return {"job_id": job_id, "synthesize_count": len(pending)}
+
+
+def _dub_file(project_id: str, name: str) -> Path:
+    path = config.dub_dir(project_id) / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="아직 음성 입힌 영상을 만들지 않았습니다")
+    return path
+
+
+@app.get("/api/projects/{project_id}/dub/video")
+def download_dub_video(project_id: str):
+    project = _project_or_404(project_id)
+    path = _dub_file(project_id, "dubbed.mp4")
+    return FileResponse(path, media_type="video/mp4", filename=f"{_safe_name(project)}_음성.mp4")
+
+
+@app.get("/api/projects/{project_id}/dub/audio")
+def download_dub_audio(project_id: str):
+    project = _project_or_404(project_id)
+    path = _dub_file(project_id, "narration.mp3")
+    return FileResponse(path, media_type="audio/mpeg", filename=f"{_safe_name(project)}_나레이션.mp3")
+
+
+@app.get("/api/projects/{project_id}/dub/srt")
+def download_dub_srt(project_id: str):
+    project = _project_or_404(project_id)
+    path = _dub_file(project_id, "narration.srt")
+    return FileResponse(path, media_type="text/plain", filename=f"{_safe_name(project)}_실측.srt")
 
 
 @app.get("/api/jobs/{job_id}")

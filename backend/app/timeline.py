@@ -80,6 +80,80 @@ def build_timeline(scenes: list[dict]) -> Timeline:
     return Timeline(entries=entries, total_sec=cursor)
 
 
+# 음성 씌우기에서 앞 문장이 길어 겹칠 때 다음 문장 앞에 두는 최소 숨 (초)
+MIN_BREATH_SEC = 0.2
+# 이보다 작은 어긋남은 반올림 오차로 보고 경고하지 않는다 (초)
+_TOLERANCE_SEC = 0.05
+
+
+def place_on_timecode(scenes: list[dict]) -> tuple[Timeline, list[dict]]:
+    """음성 씌우기용 배치 — 각 씬을 스크립트 시작 시각에 놓는다.
+
+    속도는 건드리지 않는다(영상 타이밍도 그대로). 앞 문장이 길어 시작 시각을 넘기면 짧은 숨
+    뒤로 밀고, 밀린 문장·목표 끝을 넘긴 문장을 리포트로 돌려준다 — 고칠지는 사람이 정한다.
+    타임코드가 없는 씬은 build_timeline 과 같은 이어 읽기 규칙(앞뒤 무음)으로 붙인다.
+    scenes 는 오디오가 준비된 씬(duration_sec 있음)이어야 하고, 없는 씬은 건너뛴다.
+    """
+    entries: list[TimelineEntry] = []
+    overruns: list[dict] = []
+    cursor = 0.0  # 직전 발화 끝
+    tail_gap = 0.0  # 직전 씬의 뒤 무음 — 타임코드 없는 씬이 이어 붙을 때만 쓴다
+
+    for scene in scenes:
+        duration = scene.get("duration_sec")
+        if not duration:
+            continue
+        gap_before = max(0.0, (scene.get("gap_before_ms") or 0) / 1000.0)
+        gap_after = max(0.0, (scene.get("gap_after_ms") or 0) / 1000.0)
+        target_start = scene.get("target_start_sec")
+        target_end = scene.get("target_end_sec")
+
+        if target_start is None:
+            start = cursor + tail_gap + gap_before
+            pushed = 0.0
+        else:
+            earliest = cursor + MIN_BREATH_SEC if entries else 0.0
+            start = max(float(target_start), earliest)
+            pushed = start - float(target_start)
+        end = start + float(duration)
+        over = end - float(target_end) if target_end is not None else 0.0
+
+        entries.append(
+            TimelineEntry(
+                scene_id=scene["id"],
+                index=scene["position"],
+                number=scene.get("number"),
+                title=scene.get("title"),
+                text=scene.get("text", ""),
+                gap_before_sec=gap_before,
+                speech_start_sec=start,
+                speech_end_sec=end,
+                gap_after_sec=gap_after,
+                target_duration_sec=scene.get("target_duration_sec"),
+            )
+        )
+        if pushed > _TOLERANCE_SEC or over > _TOLERANCE_SEC:
+            overruns.append(
+                {
+                    "scene_id": scene["id"],
+                    "position": scene["position"],
+                    "number": scene.get("number"),
+                    "title": scene.get("title"),
+                    "text": scene.get("text", "")[:40],
+                    "target_start_sec": target_start,
+                    "target_end_sec": target_end,
+                    "start_sec": round(start, 3),
+                    "end_sec": round(end, 3),
+                    "pushed_sec": round(max(pushed, 0.0), 2),
+                    "over_sec": round(max(over, 0.0), 2),
+                }
+            )
+        cursor = end
+        tail_gap = gap_after
+
+    return Timeline(entries=entries, total_sec=cursor), overruns
+
+
 def render_srt(timeline: Timeline, *, max_line_chars: int = 42) -> str:
     """타임라인 → SRT 자막. 한 줄이 길면 두 줄로 접는다."""
     blocks: list[str] = []

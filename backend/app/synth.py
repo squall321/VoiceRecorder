@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import shutil
+import time
+import wave
 from pathlib import Path
 
-from . import audio, config, store
+from . import audio, config, store, video
 from .textnorm import latin_words, normalize
-from .timeline import build_timeline, render_srt
+from .timeline import build_timeline, place_on_timecode, render_srt
 from .tts import SynthesisRequest, get_engine
 
 
@@ -363,6 +368,166 @@ def export_project(project: dict, *, progress=None) -> dict:
         "mp3": mp3_path.name,
         "srt": srt_path.name,
     }
+
+
+# ── 음성 씌우기 (영상 더빙) ─────────────────────────────────────────────────
+
+
+def dub_fingerprint(views: list[dict], meta: dict | None) -> str:
+    """결과가 지금 대본·음성·영상과 맞는지 판정하는 지문 — 하나라도 바뀌면 다시 만들어야 한다."""
+    parts = [str(meta.get("uploaded_at")) if meta else "-"]
+    for v in views:
+        parts.append(
+            "|".join(
+                str(v.get(k))
+                for k in (
+                    "id",
+                    "text",
+                    "synth_hash",
+                    "duration_sec",
+                    "target_start_sec",
+                    "target_end_sec",
+                    "gap_before_ms",
+                    "gap_after_ms",
+                    "status",
+                )
+            )
+        )
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def dub_info(project: dict, views: list[dict]) -> dict | None:
+    """마지막으로 만든 음성 입힌 영상의 리포트 + 지금 상태와 어긋났는지(stale)."""
+    folder = config.dub_dir(project["id"])
+    report_path = folder / "result.json"
+    if not report_path.exists() or not (folder / "dubbed.mp4").exists():
+        return None
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["stale"] = report.get("fingerprint") != dub_fingerprint(views, video.read_meta(project["id"]))
+    return report
+
+
+def dub_project(project: dict, *, original_volume: float = 0.0, progress=None) -> dict:
+    """준비된 씬을 타임코드에 배치해 영상에 입힌다 → dubbed.mp4 + narration.mp3 + narration.srt.
+
+    배치 규칙은 timeline.place_on_timecode. 내레이션 트랙은 영상 길이까지 무음으로 채워
+    mp3 를 편집기에 0초로 맞춰 올려도 영상과 어긋나지 않게 한다.
+    """
+    meta = video.read_meta(project["id"])
+    source = video.source_path(project["id"])
+    if meta is None or source is None:
+        raise ValueError("먼저 영상을 올리세요")
+    _, views = project_timeline(project)
+    if not views:
+        raise ValueError("씬이 없습니다")
+    not_ready = [v for v in views if v["status"] != "ready"]
+    if not_ready:
+        raise ValueError(f"음성이 준비되지 않은 씬이 {len(not_ready)}개 있습니다")
+
+    timeline, overruns = place_on_timecode(views)
+    total = max(timeline.total_sec, meta["duration_sec"])
+
+    folder = config.dub_dir(project["id"])
+    folder.mkdir(parents=True, exist_ok=True)
+    placed = folder / "_placed.wav"
+    if progress:
+        progress(1, "문장 배치")
+    _render_placed_wav(project["id"], timeline, placed, total)
+    audio.concat_to_mp3([placed], folder / "narration.mp3", bitrate=config.MP3_BITRATE)
+    (folder / "narration.srt").write_text(render_srt(timeline), encoding="utf-8")
+
+    if progress:
+        progress(2, "영상에 입히는 중")
+    try:
+        muxed = video.mux(
+            source,
+            placed,
+            folder / "dubbed.mp4",
+            original_volume=original_volume,
+            has_audio=bool(meta.get("has_audio")),
+        )
+    finally:
+        placed.unlink(missing_ok=True)
+        shutil.rmtree(folder / "_conv", ignore_errors=True)
+
+    report = {
+        "video_sec": meta["duration_sec"],
+        "narration_end_sec": round(timeline.total_sec, 3),
+        "total_sec": round(total, 3),
+        # 내레이션이 영상 끝을 넘긴 길이 — 플레이어는 마지막 화면을 멈춘 채 소리를 끝까지 낸다
+        "beyond_video_sec": round(max(0.0, timeline.total_sec - meta["duration_sec"]), 2),
+        "scene_count": len(timeline.entries),
+        "overruns": overruns,
+        "original_volume": original_volume,
+        **muxed,
+        "mp4_bytes": (folder / "dubbed.mp4").stat().st_size,
+        "created_at": time.time(),
+        "fingerprint": dub_fingerprint(views, meta),
+    }
+    (folder / "result.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _render_placed_wav(project_id: str, timeline, out: Path, total_sec: float) -> None:
+    """씬 wav 를 배치된 시각에 놓아 한 트랙으로 만든다. 사이와 끝은 무음."""
+    convert_dir = out.parent / "_conv"
+    sources = [config.scene_audio_path(project_id, e.scene_id) for e in timeline.entries]
+    rate, channels = _wav_format(sources[0], convert_dir)
+
+    with wave.open(str(out), "wb") as dst:
+        dst.setnchannels(channels)
+        dst.setsampwidth(2)
+        dst.setframerate(rate)
+        frame_bytes = 2 * channels
+        cursor = 0
+        for entry, src in zip(timeline.entries, sources):
+            src = _as_pcm16(src, rate, channels, convert_dir)
+            with wave.open(str(src), "rb") as fh:
+                frames = fh.readframes(fh.getnframes())
+            target = int(round(entry.speech_start_sec * rate))
+            if target > cursor:
+                dst.writeframes(b"\x00" * ((target - cursor) * frame_bytes))
+                cursor = target
+            dst.writeframes(frames)
+            cursor += len(frames) // frame_bytes
+        end = int(round(total_sec * rate))
+        if end > cursor:
+            dst.writeframes(b"\x00" * ((end - cursor) * frame_bytes))
+
+
+def _wav_format(path: Path, convert_dir: Path) -> tuple[int, int]:
+    """첫 씬의 (샘플레이트, 채널) — 트랙 전체를 이 형식으로 맞춘다. 못 읽는 wav 면 16bit 로 바꿔 본다."""
+    try:
+        with wave.open(str(path), "rb") as fh:
+            return fh.getframerate(), fh.getnchannels()
+    except (wave.Error, EOFError):
+        converted = _convert(path, None, None, convert_dir)
+        with wave.open(str(converted), "rb") as fh:
+            return fh.getframerate(), fh.getnchannels()
+
+
+def _as_pcm16(path: Path, rate: int, channels: int, convert_dir: Path) -> Path:
+    """엔진을 바꿔 씬마다 형식이 다를 수 있다(멜로 44.1k, 채터박스 24k) — 다르면 맞춰 변환한다."""
+    try:
+        with wave.open(str(path), "rb") as fh:
+            if (fh.getframerate(), fh.getnchannels(), fh.getsampwidth()) == (rate, channels, 2):
+                return path
+    except (wave.Error, EOFError):
+        pass
+    return _convert(path, rate, channels, convert_dir)
+
+
+def _convert(path: Path, rate: int | None, channels: int | None, convert_dir: Path) -> Path:
+    dst = convert_dir / f"{path.stem}.wav"
+    args = [audio.FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", str(path)]
+    if channels:
+        args += ["-ac", str(channels)]
+    if rate:
+        args += ["-ar", str(rate)]
+    args += ["-c:a", "pcm_s16le", str(dst)]
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    audio._run(args)
+    return dst
 
 
 def _probe_sample_rate(path: Path, fallback: int) -> int:

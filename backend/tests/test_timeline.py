@@ -83,3 +83,44 @@ def test_srt_wraps_long_lines_to_two():
 
 def test_empty_srt_is_empty_string():
     assert render_srt(build_timeline([])) == ""
+
+
+# ── 음성 씌우기 배치 (타임코드 고정) ────────────────────────────────────────
+
+
+def timed(sid, position, duration, start, end=None, **kw):
+    return {**scene(sid, position, duration, **kw), "target_start_sec": start, "target_end_sec": end}
+
+
+def test_place_on_timecode_anchors_each_scene_at_its_start():
+    from app.timeline import place_on_timecode
+
+    timeline, overruns = place_on_timecode(
+        [timed("a", 0, 3.0, 0.5, 4.0), timed("b", 1, 2.0, 6.0, 9.0), timed("c", 2, 1.0, 9.0)]
+    )
+    assert [e.speech_start_sec for e in timeline.entries] == [0.5, 6.0, 9.0]
+    assert timeline.total_sec == 10.0
+    assert overruns == []
+
+
+def test_place_on_timecode_pushes_colliding_scene_after_a_breath():
+    from app.timeline import MIN_BREATH_SEC, place_on_timecode
+
+    timeline, overruns = place_on_timecode([timed("a", 0, 5.0, 0.0, 4.0), timed("b", 1, 2.0, 4.0, 6.0)])
+    b = timeline.entries[1]
+    assert b.speech_start_sec == 5.0 + MIN_BREATH_SEC
+    # a 는 목표 끝을 1초 넘기고, b 는 1.2초 밀려 목표 끝도 넘긴다
+    assert [(o["scene_id"], o["pushed_sec"], o["over_sec"]) for o in overruns] == [
+        ("a", 0.0, 1.0),
+        ("b", 1.2, 1.2),
+    ]
+
+
+def test_place_on_timecode_untimed_scenes_follow_continuous_rules():
+    from app.timeline import place_on_timecode
+
+    timeline, _ = place_on_timecode(
+        [timed("a", 0, 2.0, 1.0), scene("b", 1, 1.0, before=100, after=0), timed("c", 2, 1.0, 10.0)]
+    )
+    # b 는 a 끝(3.0) + a 의 뒤 무음(0.4) + b 의 앞 무음(0.1)
+    assert [round(e.speech_start_sec, 3) for e in timeline.entries] == [1.0, 3.5, 10.0]

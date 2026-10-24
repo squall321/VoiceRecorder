@@ -93,6 +93,11 @@ class FitTimecodeRequest(BaseModel):
     max_speed: float = Field(default=2.0, ge=1.0, le=2.0)
 
 
+class DubRequest(BaseModel):
+    # 원본 영상 소리 볼륨. 0 이면 버리고 내레이션만, 0 보다 크면 그만큼 줄여 깔아 섞는다.
+    original_volume: float = Field(default=0.0, ge=0.0, le=2.0)
+
+
 class SynthesizeRequest(BaseModel):
     # 비우면 합성이 필요한 씬(pending/stale/error)만 골라 돌린다
     scene_ids: list[str] | None = None

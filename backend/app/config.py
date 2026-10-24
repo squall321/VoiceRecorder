@@ -44,6 +44,8 @@ CHUNK_GAP_SEC = float(os.environ.get("VOICEREC_CHUNK_GAP_SEC", "0.18"))
 
 # 참조 음성 업로드 상한 (바이트)
 MAX_VOICE_UPLOAD_BYTES = int(os.environ.get("VOICEREC_MAX_VOICE_BYTES", str(20 * 1024 * 1024)))
+# 음성 씌우기 원본 영상 업로드 상한 (바이트)
+MAX_VIDEO_UPLOAD_BYTES = int(os.environ.get("VOICEREC_MAX_VIDEO_BYTES", str(4 * 1024**3)))
 
 
 def ensure_dirs() -> None:
@@ -71,6 +73,16 @@ def export_mp3_path(project_id: str) -> Path:
 
 def export_srt_path(project_id: str) -> Path:
     return project_dir(project_id) / "export" / "narration.srt"
+
+
+def video_dir(project_id: str) -> Path:
+    """음성 씌우기용 원본 영상과 그 정보(meta.json)."""
+    return project_dir(project_id) / "video"
+
+
+def dub_dir(project_id: str) -> Path:
+    """음성 입힌 결과 — dubbed.mp4 · narration.mp3 · narration.srt · result.json."""
+    return project_dir(project_id) / "dub"
 
 
 def tts_raw_path(tts_id: str) -> Path:
