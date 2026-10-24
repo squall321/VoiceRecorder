@@ -540,3 +540,27 @@ def test_first_synthesis_label_says_model_is_loading(client, stub_engine, monkey
 
     assert "모델 불러오는 중" in labels[0]
     assert all("모델 불러오는 중" not in label for label in labels[1:])
+
+
+def test_known_melo_misreads_are_hinted_until_reading_covers_them(client):
+    # MeloTTS 가 [삼위]로 읽었던 '상위' — 씬에 알려 주고, 읽는 법으로 바꾸면 더는 알리지 않는다
+    raw = '01 결과 (0:00–0:05) "상위 세 유형에 몰려 있습니다."'
+    body = client.post("/api/projects", json={"title": "오독", "raw_script": raw}).json()
+    scene = body["scenes"][0]
+    assert body["project"]["engine"] == "melo"
+    assert [h["word"] for h in scene["misread_hints"]] == ["상위"]
+    assert scene["misread_hints"][0]["suggest"] == "가장 많은"
+
+    pid = body["project"]["id"]
+    patched = client.patch(
+        f"/api/projects/{pid}/scenes/{scene['id']}", json={"reading": "상위 → 가장 많은"}
+    ).json()
+    assert patched["scenes"][0]["misread_hints"] == []
+    assert patched["scenes"][0]["normalized_text"].startswith("가장 많은 세 유형")
+
+
+def test_misread_hints_only_for_melo():
+    from app.misreads import misread_hints
+
+    assert misread_hints("연계 구조", "chatterbox") == []
+    assert [h["word"] for h in misread_hints("연계 구조와 심의", "melo")] == ["연계", "심의"]

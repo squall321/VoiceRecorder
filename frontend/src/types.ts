@@ -49,6 +49,8 @@ export interface Scene {
   normalized_text: string;
   // 정규화 뒤에도 남은 영문 — 한국어 합성기가 건너뛸 수 있다
   unread_latin: string[];
+  // 이 엔진이 잘못 읽었던 말 — suggest 를 읽는 법에 넣으면 우회된다(confirmed=false 는 아직 확인 안 됨)
+  misread_hints: { word: string; heard: string; suggest: string | null; confirmed: boolean }[];
   target_start_sec: number | null;
   target_end_sec: number | null;
   target_duration_sec: number | null;

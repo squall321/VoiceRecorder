@@ -10,6 +10,7 @@ import wave
 from pathlib import Path
 
 from . import audio, config, store, video
+from .misreads import misread_hints
 from .textnorm import latin_words, normalize
 from .timeline import build_timeline, place_on_timecode, render_srt
 from .tts import SynthesisRequest, get_engine
@@ -309,6 +310,8 @@ def scene_view(project: dict, scene: dict) -> dict:
         "normalized_text": spoken,
         # 정규화 뒤에도 남은 영문 — 한국어 합성기가 건너뛸 수 있어 화면에서 읽는 법을 적게 한다
         "unread_latin": latin_words(spoken) if project["language"] == "ko" else [],
+        # 이 엔진이 잘못 읽었던 말 — 화면이 알려 주고 우회 표기를 한 번에 읽는 법에 넣게 한다
+        "misread_hints": misread_hints(spoken, params["engine"]),
     }
 
 

@@ -38,6 +38,13 @@ export function SceneCard({
   useEffect(() => setText(scene.text), [scene.id, scene.text]);
   useEffect(() => setReading(scene.reading ?? ""), [scene.id, scene.reading]);
 
+  // 읽는 법에 쌍 하나를 덧붙인다 — 이미 적어 둔 것은 지우지 않는다
+  function addReading(pair: string) {
+    const next = reading.trim() ? `${reading.trim()} · ${pair}` : pair;
+    setReading(next);
+    onPatch({ reading: next });
+  }
+
   const drift = formatDrift(scene.drift_sec);
   const fit = suggestSpeed(scene.raw_duration_sec, scene.target_duration_sec);
   const dirty = text !== scene.text;
@@ -87,6 +94,27 @@ export function SceneCard({
         <div className="latin-warning">
           ⚠ 영문 {scene.unread_latin.join(", ")} — 합성기가 건너뛸 수 있습니다. 읽는 법에 「
           {scene.unread_latin[0]} → 한글 소리」처럼 적어 주세요.
+        </div>
+      )}
+
+      {scene.misread_hints.length > 0 && (
+        <div className="misread-hints">
+          {scene.misread_hints.map((hint) => (
+            <span key={hint.word} className="misread-hint">
+              「{hint.word}」→ [{hint.heard}]로 들린 적 있음
+              {hint.suggest ? (
+                <button
+                  className="btn small"
+                  title="읽는 법에 이 우회 표기를 넣습니다 (자막은 그대로)"
+                  onClick={() => addReading(`${hint.word} → ${hint.suggest}`)}
+                >
+                  「{hint.suggest}」로 읽기{hint.confirmed ? "" : " (확인 필요)"}
+                </button>
+              ) : (
+                <span> — 다른 말로 바꿔 쓰는 것을 권합니다</span>
+              )}
+            </span>
+          ))}
         </div>
       )}
 
