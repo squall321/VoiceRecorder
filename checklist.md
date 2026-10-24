@@ -59,6 +59,19 @@
 - [x] `pnpm build` 성공 (타입 오류 0)
 - [x] git commit 6개 + push (`squall321/VoiceRecorder` main)
 
+## 8. 음성 씌우기 — 영상 더빙 (2026-10-24, PLAN §11)
+- [ ] SIF 빌드 훅에 ffmpeg 추가 (현재 포털 SIF 에 ffmpeg 없음)
+- [ ] textnorm — 영문 약어 철자, 숫자 뒤 단위, `·` 쉼표, 개·대·쌍·종·건 1~9 고유어
+- [ ] script_parser — 줄머리 타임코드·초 단위·시작만 있는 형식, 마크다운 제목 구간, 표(마크다운·TSV)
+- [ ] 씬별 읽는 법 — 파서 추출(열·`읽는 법:` 줄) + scenes.reading 컬럼 + 합성 반영 + API
+- [ ] video.py — ffprobe 정보, 먹싱(복사 → 실패 시 H.264), 원본 소리 섞기
+- [ ] 타임코드 고정 배치 + 배치 wav/mp3 + 실측 SRT + 경고 리포트
+- [ ] 작업 큐 dub (미생성 씬 합성 → 배치 → 먹싱) + 엔드포인트(영상 업·다운·삭제, 더빙, 결과 3종)
+- [ ] 프런트 — 영상 패널(업로드 진행률·미리보기·옵션·결과·경고), 씬 읽는 법 입력, 영문 남음 경고
+- [ ] pytest 전부 통과 + `pnpm build`
+- [ ] 로컬 실검증 — 실제 MeloTTS 로 테스트 영상 더빙
+- [ ] 포털 반영 (push → SIF 재빌드) — 사용자 확인 후
+
 ## 남은 일 (다음 세션)
 - [ ] **GPU 실합성 검증** — 검증 당시 GPU 를 vLLM(13GB)이 점유해 CPU 로만 확인했다.
       VRAM 이 3GB 이상 나면 `backend/.venv/bin/python scripts/smoke_chatterbox.py` 로 재확인.
