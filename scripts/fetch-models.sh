@@ -29,6 +29,24 @@ for repo in repos:
     p = snapshot_download(repo)
     size = sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file())
     print(f"  ✓ {repo}  ({size / 2**30:.2f} GB)")
+
+# MeloTTS 부속 BERT — melo 는 import 할 때 모든 언어 모듈이 자기 토크나이저를 불러온다(한국어만 써도).
+# 하나라도 캐시에 없으면 HF_HUB_OFFLINE 에서 합성 전에 OSError 로 죽는다(2026-10-24 포털 실측:
+# tohoku-nlp/bert-base-japanese-v3 를 못 찾음). 한국어 BERT 만 가중치가 필요하고 나머지는 토크나이저 파일뿐이다.
+melo_aux = {
+    "kykim/bert-kor-base": ["config.json", "pytorch_model.bin", "tokenizer_config.json", "vocab.txt"],
+    "tohoku-nlp/bert-base-japanese-v3": ["tokenizer_config.json", "vocab.txt"],
+    "bert-base-uncased": ["config.json", "tokenizer_config.json", "tokenizer.json", "vocab.txt"],
+    "bert-base-multilingual-uncased": ["config.json", "tokenizer_config.json", "tokenizer.json", "vocab.txt"],
+    "dbmdz/bert-base-french-europeana-cased": ["config.json", "tokenizer_config.json", "vocab.txt"],
+    "dccuchile/bert-base-spanish-wwm-uncased": [
+        "config.json", "special_tokens_map.json", "tokenizer_config.json", "tokenizer.json", "vocab.txt",
+    ],
+}
+for repo, files in melo_aux.items():
+    p = snapshot_download(repo, allow_patterns=files)
+    size = sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file())
+    print(f"  ✓ {repo}  ({size / 2**20:.1f} MB, MeloTTS 부속)")
 PY
 
 # ── wetext FST (CosyVoice 정규화) — modelscope 캐시를 var/models 안에 받는다 ──

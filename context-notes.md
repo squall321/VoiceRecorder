@@ -192,3 +192,17 @@ GitHub 리포가 공개다(`api.github.com/repos/squall321/VoiceRecorder` 익명
 - 실제 MeloTTS(CPU 사이드카) 1.2배로 4문장 + 20초 영상: 작업 10초, mp4 = h264 복사 + aac.
   배치 wav 의 실제 발화 시작이 배치 시각보다 0.075~0.09초 늦다 — MeloTTS 출력 앞 무음이라 정상.
 - 브라우저(Playwright)로 업로드 진행 → 영상 교체 시 이전 결과 삭제 → 더빙 → 재생·다운로드·경고 확인.
+
+### 포털 반영 때 드러난 것 (2026-10-24)
+
+- 푸시하면 HEAXHub 스캐너(5분 주기)가 커밋 변화를 보고 SIF 를 스스로 다시 빌드한다. 빌더에는 잠금이 없고
+  임시 경로(`<slug>.sif.building`)가 고정이라, 그때 `redeploy-app.sh --rebuild` 를 같이 돌리면 서로의 임시
+  파일을 지운다. 그래서 스캐너 빌드가 끝나기를 기다렸다가 `redeploy-app.sh voice-recorder`(전환만)를 돌렸다.
+  새 SIF 는 Debian trixie 베이스라 ffmpeg 7.1(libx264·aac·libmp3lame·amix normalize)이 들어간다.
+- 포털 데이터의 모델 폴더(`HEAXHub/var/app_data/voice_recorder/models/hub`)가 비어 있었다. `HF_HUB_OFFLINE=1`
+  이라 포털에서는 세 엔진 모두 합성할 수 없던 상태였다. MeloTTS 관련 캐시 7개(657MB)를 로컬 `var/models`
+  에서 복사해 넣었고, 인스턴스 안에서 MeloTTS 1.2배 더빙(합성·배치·먹싱)이 24초에 끝나는 것을 확인했다.
+  Chatterbox(3GB)·CosyVoice(9GB) 가중치는 아직 포털에 없다 — 그 엔진을 고르면 오프라인 오류가 난다.
+- MeloTTS 는 import 할 때 모든 언어 모듈이 자기 BERT 토크나이저를 불러온다(한국어만 써도 일본어·영어·
+  프랑스어·스페인어·다국어 토크나이저가 필요). `fetch-models.sh` 가 MeloTTS-Korean 본체만 받고 이들을 빠뜨려
+  폐쇄망에서도 같은 오류가 날 상태였다 — 토크나이저 파일만 `allow_patterns` 로 받게 고쳤다.
