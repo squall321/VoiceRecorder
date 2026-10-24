@@ -227,14 +227,18 @@ def _target_duration(scene: dict) -> float | None:
 def fit_to_timecode(project: dict, *, max_speed: float = 2.0) -> dict:
     """각 씬을 스크립트의 타임코드 슬롯에 맞춘다.
 
-    - 낭독이 슬롯보다 짧으면: 속도 1.0 을 유지하고 뒤 무음으로 슬롯을 채운다 (자연스러움 우선).
-    - 낭독이 슬롯보다 길면: 그 씬만 속도를 올려 슬롯에 맞춘다 (max_speed 상한).
+    - 프로젝트 기본 속도(예: 1.2배)로 슬롯에 들어가면: 그 속도를 그대로 따르고 뒤 무음으로 슬롯을 채운다.
+      (예전엔 1.0 으로 되돌렸는데, 사용자가 정한 기본 속도보다 느려져 다른 씬과 말빠르기가 달라졌다.)
+    - 기본 속도로도 슬롯을 넘으면: 그 씬만 속도를 올려 슬롯에 맞춘다 (max_speed 상한).
     - max_speed 로도 안 들어가면: 속도를 상한에 두고 넘치는 씬으로 리포트한다 (원고 압축 필요).
 
     원본 wav 를 ffmpeg 로 다시 렌더링만 하므로 모델(GPU)을 다시 돌리지 않는다.
     무음 정렬은 절대 시각 기준이라 한 씬이 살짝 밀려도 다음 여유 씬에서 자동 회수된다.
     """
     over_budget: list[dict] = []
+    base = float(project.get("speed") or 1.0)
+    # 상한이 기본 속도보다 낮으면 '맞추려다 오히려 느려지는' 일이 생긴다 — 기본 속도 아래로는 내리지 않는다
+    ceiling = max(max_speed, base)
 
     # 1) 씬별 속도 결정
     for scene in store.list_scenes(project["id"]):
@@ -242,21 +246,22 @@ def fit_to_timecode(project: dict, *, max_speed: float = 2.0) -> dict:
         raw = scene.get("raw_duration_sec")
         if not target or not raw:
             continue
-        if raw > target + 0.05:
+        if raw / base > target + 0.05:
             speed = raw / target
-            if speed > max_speed:
+            if speed > ceiling:
                 over_budget.append(
                     {
                         "number": scene.get("number"),
                         "title": scene.get("title"),
                         "target_sec": round(target, 2),
-                        "min_sec": round(raw / max_speed, 2),  # 상한 배속으로도 이 길이
+                        "min_sec": round(raw / ceiling, 2),  # 상한 배속으로도 이 길이
                     }
                 )
-                speed = max_speed
+                speed = ceiling
             store.update_scene(scene["id"], {"speed": round(speed, 3)})
         else:
-            store.update_scene(scene["id"], {"speed": 1.0})
+            # 씬별 override 를 지워 프로젝트 기본 속도를 따르게 한다
+            store.update_scene(scene["id"], {"speed": None})
 
     for scene in store.list_scenes(project["id"]):
         rerender_speed(project, scene)

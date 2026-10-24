@@ -269,6 +269,18 @@ def test_fit_timecode_speeds_up_overshooting_scene(client, stub_engine):
     assert isinstance(body["fit_report"]["over_budget"], list)
 
 
+def test_fit_timecode_keeps_project_speed_for_scenes_that_fit(client):
+    # 기본 속도(1.2)로 슬롯에 들어가는 씬은 1.0 으로 느려지지 않고 프로젝트 속도를 그대로 따른다
+    project = _create(client)
+    pid = project["project"]["id"]
+    _synthesize(client, pid)
+
+    body = client.post(f"/api/projects/{pid}/fit-timecode", json={}).json()
+    assert body["project"]["speed"] == 1.2
+    assert all(s["speed"] is None for s in body["scenes"])
+    assert all(s["effective_speed"] == 1.2 for s in body["scenes"])
+
+
 def test_fit_timecode_requires_all_ready(client):
     project = _create(client)
     pid = project["project"]["id"]
