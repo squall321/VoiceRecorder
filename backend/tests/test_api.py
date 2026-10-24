@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import store
+from app import config, store
 from app.main import app
 from app.tts import registry
 from app.tts.base import EngineStatus, SynthesisRequest, TTSEngine
@@ -27,7 +27,7 @@ SAMPLE_RATE = 24000
 class StubEngine(TTSEngine):
     """글자 수에 비례한 길이의 톤을 만든다 — GPU 없이 파이프라인 전체를 검증하려고."""
 
-    id = "chatterbox"  # 기본 엔진 자리를 그대로 차지한다
+    id = config.DEFAULT_ENGINE  # 기본 엔진 자리를 그대로 차지한다
     name = "Stub"
     description = "테스트용"
     license = "MIT"
@@ -65,7 +65,7 @@ class StubEngine(TTSEngine):
 def stub_engine():
     engine = StubEngine()
     registry._ENGINES.clear()
-    registry._ENGINES["chatterbox"] = engine
+    registry._ENGINES[engine.id] = engine
     yield engine
     registry._ENGINES.clear()
 
@@ -108,6 +108,12 @@ def test_engines_report_license_and_availability(client):
     body = client.get("/api/engines").json()
     assert body["engines"][0]["available"] is True
     assert "MIT" in body["engines"][0]["license"]
+
+
+def test_melo_is_the_default_engine(client):
+    # 사용자가 MeloTTS 를 기본으로 정했다 — 엔진을 안 고른 프로젝트·원샷 TTS 가 이걸 쓴다
+    assert client.get("/api/engines").json()["default"] == "melo"
+    assert _create(client)["project"]["engine"] == "melo"
 
 
 def test_parse_endpoint_returns_scenes_with_targets(client):

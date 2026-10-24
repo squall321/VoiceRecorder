@@ -51,8 +51,8 @@ HEAXHub 서브 웹 플랫폼 (`fastapi_react` 스택). 영상 내레이션 스�
 
 | 엔진 | 코드 라이선스 | 가중치 라이선스 | 한국어 | 판정 |
 |---|---|---|---|---|
-| **Chatterbox Multilingual** (Resemble AI) | MIT (`chatterbox-tts` 0.1.7) | **MIT** (`ResembleAI/chatterbox`) | ✅ `ko` 포함 23개 언어 | **채택 — 주엔진** |
-| **MeloTTS-Korean** (MyShell) | MIT | **MIT** (`myshell-ai/MeloTTS-Korean`) | ✅ | **채택 — 선택적 CPU 사이드카** |
+| **Chatterbox Multilingual** (Resemble AI) | MIT (`chatterbox-tts` 0.1.7) | **MIT** (`ResembleAI/chatterbox`) | ✅ `ko` 포함 23개 언어 | **채택 — GPU 엔진·화자 복제** |
+| **MeloTTS-Korean** (MyShell) | MIT | **MIT** (`myshell-ai/MeloTTS-Korean`) | ✅ | **채택 — 기본 엔진(CPU 사이드카, 2026-10-24~)** |
 | Kokoro-82M | Apache-2.0 | Apache-2.0 | ❌ 미지원 | 보류 (영어 전용 요구 생기면) |
 | piper-tts 1.5.0 | **GPL-3.0-or-later** | — | 제한적 | ✗ 제외 (GPL 전파) |
 | XTTS-v2 (Coqui) | MPL-2.0 | **CPML — 비상업** | ✅ | ✗ 제외 |

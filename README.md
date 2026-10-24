@@ -43,8 +43,8 @@
 
 | 엔진 | 코드 | 가중치 | 한국어 | 채택 |
 |---|---|---|---|---|
-| **Chatterbox Multilingual** (Resemble AI) | MIT | **MIT** | ✅ 23개 언어 중 하나 | **주엔진** |
-| **MeloTTS** (MyShell) | MIT | **MIT** | ✅ | 선택적 CPU 사이드카 |
+| **Chatterbox Multilingual** (Resemble AI) | MIT | **MIT** | ✅ 23개 언어 중 하나 | GPU 엔진 · 화자 복제 |
+| **MeloTTS** (MyShell) | MIT | **MIT** | ✅ | **기본 엔진** (CPU 사이드카) |
 | Kokoro-82M | Apache-2.0 | Apache-2.0 | ❌ | 보류 (영어 전용 요구 시) |
 | piper-tts 1.5.0 | **GPL-3.0-or-later** | — | 제한적 | ✗ 제외 |
 | XTTS-v2 (Coqui) | MPL-2.0 | **CPML (비상업)** | ✅ | ✗ 제외 |

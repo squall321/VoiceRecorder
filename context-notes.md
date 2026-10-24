@@ -206,3 +206,11 @@ GitHub 리포가 공개다(`api.github.com/repos/squall321/VoiceRecorder` 익명
 - MeloTTS 는 import 할 때 모든 언어 모듈이 자기 BERT 토크나이저를 불러온다(한국어만 써도 일본어·영어·
   프랑스어·스페인어·다국어 토크나이저가 필요). `fetch-models.sh` 가 MeloTTS-Korean 본체만 받고 이들을 빠뜨려
   폐쇄망에서도 같은 오류가 날 상태였다 — 토크나이저 파일만 `allow_patterns` 로 받게 고쳤다.
+
+### 기본 엔진을 MeloTTS 로 (2026-10-24, 사용자 지시)
+
+실제 내레이션 작업이 전부 MeloTTS 1.2배였고 사용자가 "멜로티티에스를 기본으로" 정했다. `config.DEFAULT_ENGINE`
+기본값을 `melo` 로 바꿨다(환경변수 `VOICEREC_DEFAULT_ENGINE` 로 덮어쓸 수 있다). 화면은 `/api/engines` 의
+`default` 를 받아 새 내레이션의 첫 선택과 상단 배지에 쓴다 — 예전엔 등록 순서상 첫 가용 엔진(Chatterbox)을 골랐다.
+엔진을 지정하지 않는 원샷 TTS 호출자도 기본값을 따른다. WebDesignAgents 의 `_pick_engine` 은 요청 엔진이 없으면
+서버 `default` 를 고르므로 WDA 내레이션도 MeloTTS 로 바뀐다. 속도 기본값(1.0)은 지시가 없어 그대로 뒀다.

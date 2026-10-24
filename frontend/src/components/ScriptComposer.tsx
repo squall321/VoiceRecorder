@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatSeconds } from "../format";
 import type { Engine, ParseResponse, ProjectPayload, Voice } from "../types";
+import { pickDefaultEngine } from "./EngineStatus";
 
 const SAMPLE = `01 오프닝 (0:00–0:08) "질문 하나가 의사결정문이 되기까지 — HWAX 협업진단 플랫폼. 방열 난제를 맡은 B책임의 하루를 따라가 봅니다."
 
@@ -11,16 +12,17 @@ const SAMPLE = `01 오프닝 (0:00–0:08) "질문 하나가 의사결정문이 
 
 interface Props {
   engines: Engine[];
+  defaultEngine: string;
   voices: Voice[];
   onCreated: (payload: ProjectPayload) => void;
   onCancel: () => void;
 }
 
-export function ScriptComposer({ engines, voices, onCreated, onCancel }: Props) {
+export function ScriptComposer({ engines, defaultEngine, voices, onCreated, onCancel }: Props) {
   const [title, setTitle] = useState("");
   const [raw, setRaw] = useState("");
   const [parsed, setParsed] = useState<ParseResponse | null>(null);
-  const [engine, setEngine] = useState(engines.find((e) => e.available)?.id ?? "chatterbox");
+  const [engine, setEngine] = useState(pickDefaultEngine(engines, defaultEngine)?.id ?? defaultEngine);
   const [voiceId, setVoiceId] = useState("");
   const [gapMs, setGapMs] = useState(400);
   const [speed, setSpeed] = useState(1.0);

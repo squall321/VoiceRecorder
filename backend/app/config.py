@@ -32,7 +32,8 @@ TTS_DIR = DATA_DIR / "tts"
 # 폐쇄망에서는 HF_HUB_OFFLINE=1 로 네트워크를 아예 안 타게 막는다.
 MODELS_DIR = Path(os.environ.get("VOICEREC_MODELS_DIR") or (_REPO_ROOT / "var" / "models"))
 
-DEFAULT_ENGINE = os.environ.get("VOICEREC_DEFAULT_ENGINE", "chatterbox")
+# 기본 엔진은 MeloTTS — 실제 내레이션 작업이 전부 MeloTTS 1.2배로 굳어져서 사용자가 기본으로 정했다(2026-10-24).
+DEFAULT_ENGINE = os.environ.get("VOICEREC_DEFAULT_ENGINE", "melo")
 DEFAULT_LANGUAGE = os.environ.get("VOICEREC_DEFAULT_LANGUAGE", "ko")
 DEFAULT_GAP_MS = int(os.environ.get("VOICEREC_DEFAULT_GAP_MS", "400"))
 MP3_BITRATE = os.environ.get("VOICEREC_MP3_BITRATE", "192k")

@@ -14,8 +14,8 @@ description: |
   차이를 보여주므로 영상 편집 타임라인에 바로 맞출 수 있다.
 
   TTS 는 상업 이용 가능한 MIT 라이선스 모델만 쓴다:
-    - Chatterbox Multilingual (Resemble AI) — 코드·가중치 모두 MIT, 한국어 포함 23개 언어
-    - MeloTTS (MyShell) — MIT, CPU 사이드카 (선택 설치)
+    - MeloTTS (MyShell) — MIT, CPU 사이드카 (기본 엔진)
+    - Chatterbox Multilingual (Resemble AI) — 코드·가중치 모두 MIT, 한국어 포함 23개 언어, 화자 복제
 
 tags:
   - tts

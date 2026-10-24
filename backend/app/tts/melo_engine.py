@@ -44,7 +44,7 @@ def _melo_installed() -> bool:
 class MeloEngine(TTSEngine):
     id = "melo"
     name = "MeloTTS (CPU)"
-    description = "CPU 에서 실시간에 가깝게 도는 경량 엔진. GPU 가 없거나 급할 때 쓴다."
+    description = "기본 엔진. CPU 에서 실시간에 가깝게 도는 한국어 경량 엔진(화자 복제 없음)."
     license = "MIT (코드·가중치 모두)"
     supports_voice_cloning = False
 

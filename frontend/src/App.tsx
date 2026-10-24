@@ -16,6 +16,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [payload, setPayload] = useState<ProjectPayload | null>(null);
   const [engines, setEngines] = useState<Engine[]>([]);
+  // 서버가 정한 기본 엔진(현재 MeloTTS) — 새 내레이션의 첫 선택과 상단 배지에 쓴다
+  const [defaultEngine, setDefaultEngine] = useState("");
   const [voices, setVoices] = useState<Voice[]>([]);
   const [dictionary, setDictionary] = useState<DictionaryEntry[]>([]);
   const [job, setJob] = useState<Job | null>(null);
@@ -31,6 +33,7 @@ export default function App() {
         api.listDictionary(),
       ]);
       setEngines(engineList.engines);
+      setDefaultEngine(engineList.default);
       setVoices(voiceList.voices);
       setDictionary(dict.entries);
     } catch (err) {
@@ -119,7 +122,7 @@ export default function App() {
           🎙 VoiceRecorder <small>내레이션 음성 생성</small>
         </span>
         <span className="spacer" />
-        <EngineStatus engines={engines} />
+        <EngineStatus engines={engines} defaultEngine={defaultEngine} />
         <button className="btn small" onClick={() => setDrawer(true)}>
           화자 · 발음 사전
         </button>
@@ -186,6 +189,7 @@ export default function App() {
         {view === "new" && (
           <ScriptComposer
             engines={engines}
+            defaultEngine={defaultEngine}
             voices={voices}
             onCancel={() => setView("list")}
             onCreated={(next) => {
