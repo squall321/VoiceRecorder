@@ -32,8 +32,10 @@ export UV_PYTHON_INSTALL_DIR=/opt/uv-python
 #   - build-essential(g++/gcc/make): CosyVoice 의존성 중 pyworld==0.3.4 는 Cython/C++ 확장이라
 #     소스 빌드에 컴파일러가 필요하다(개발 호스트엔 gcc 가 있어 통과했지만 슬림 컨테이너엔 없다 →
 #     "command 'c++' failed: No such file or directory" 로 빌드 중단).
+#   - ffmpeg: 런타임 필수(속도 atempo·mp3 병합·보이스 변환·영상 먹싱). 슬림 이미지엔 없어서
+#     빠지면 앱은 뜨지만 합성 후처리부터 전부 실패한다.
 apt-get update
-apt-get install -y --no-install-recommends git ca-certificates build-essential
+apt-get install -y --no-install-recommends git ca-certificates build-essential ffmpeg
 rm -rf /var/lib/apt/lists/*
 
 # ════════════════════════════════════════════════════════════════════════════
