@@ -71,7 +71,10 @@
 - [x] pytest 149개 통과 + `pnpm build`
 - [x] 로컬 실검증 — 실제 MeloTTS 1.2배로 4문장 합성+더빙 10초, 발화 시작이 배치 시각 +0.08초 이내, 브라우저 업로드→더빙→재생 확인
 - [x] 덤으로 고친 기존 버그 — 내보내기 전 SRT 다운로드가 한글 제목에서 500
-- [ ] 포털 반영 (push → SIF 재빌드) — 사용자 확인 후
+- [x] 포털 반영 — push → 스캐너 SIF 재빌드(ffmpeg 7.1) → `redeploy-app.sh voice-recorder` 전환, 포털 안 MeloTTS 더빙 실검증
+- [x] 포털 모델 폴더에 MeloTTS 캐시 반입 + `fetch-models.sh` 에 부속 토크나이저 추가 (폐쇄망 대비)
+- [x] 포털 발음 사전 기본 4개 (HWAX·응력·대책·전위치)
+- [ ] 포털에 Chatterbox(3GB)·CosyVoice(9GB) 가중치 반입 — 지금은 그 엔진을 고르면 오프라인 오류 (사용자 확인 후)
 
 ## 남은 일 (다음 세션)
 - [ ] **GPU 실합성 검증** — 검증 당시 GPU 를 vLLM(13GB)이 점유해 CPU 로만 확인했다.
