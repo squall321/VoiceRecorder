@@ -36,6 +36,8 @@ MODELS_DIR = Path(os.environ.get("VOICEREC_MODELS_DIR") or (_REPO_ROOT / "var" /
 DEFAULT_ENGINE = os.environ.get("VOICEREC_DEFAULT_ENGINE", "melo")
 DEFAULT_LANGUAGE = os.environ.get("VOICEREC_DEFAULT_LANGUAGE", "ko")
 DEFAULT_GAP_MS = int(os.environ.get("VOICEREC_DEFAULT_GAP_MS", "400"))
+# 새 프로젝트·원샷 TTS 의 말 속도 기본값 — 사용자의 표준이 MeloTTS 1.2배라 그렇게 정했다(2026-10-24).
+DEFAULT_SPEED = float(os.environ.get("VOICEREC_DEFAULT_SPEED", "1.2"))
 MP3_BITRATE = os.environ.get("VOICEREC_MP3_BITRATE", "192k")
 
 # 한 번에 모델로 넘기는 최대 글자 수. 넘으면 문장 경계로 쪼개 합성 후 이어 붙인다.

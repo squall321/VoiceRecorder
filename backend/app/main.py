@@ -116,7 +116,12 @@ def health() -> dict:
 
 @app.get("/api/engines")
 def engines() -> dict:
-    return {"engines": describe_engines(), "default": config.DEFAULT_ENGINE}
+    # default_speed 는 새 내레이션 화면의 첫 속도 — 엔진 기본값과 같이 서버가 정한다
+    return {
+        "engines": describe_engines(),
+        "default": config.DEFAULT_ENGINE,
+        "default_speed": config.DEFAULT_SPEED,
+    }
 
 
 # ── 스크립트 파싱 ───────────────────────────────────────────────────────────

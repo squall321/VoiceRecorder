@@ -16,8 +16,9 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [payload, setPayload] = useState<ProjectPayload | null>(null);
   const [engines, setEngines] = useState<Engine[]>([]);
-  // 서버가 정한 기본 엔진(현재 MeloTTS) — 새 내레이션의 첫 선택과 상단 배지에 쓴다
+  // 서버가 정한 기본 엔진(현재 MeloTTS)·속도(1.2배) — 새 내레이션의 첫 선택과 상단 배지에 쓴다
   const [defaultEngine, setDefaultEngine] = useState("");
+  const [defaultSpeed, setDefaultSpeed] = useState(1.2);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [dictionary, setDictionary] = useState<DictionaryEntry[]>([]);
   const [job, setJob] = useState<Job | null>(null);
@@ -34,6 +35,7 @@ export default function App() {
       ]);
       setEngines(engineList.engines);
       setDefaultEngine(engineList.default);
+      setDefaultSpeed(engineList.default_speed);
       setVoices(voiceList.voices);
       setDictionary(dict.entries);
     } catch (err) {
@@ -190,6 +192,7 @@ export default function App() {
           <ScriptComposer
             engines={engines}
             defaultEngine={defaultEngine}
+            defaultSpeed={defaultSpeed}
             voices={voices}
             onCancel={() => setView("list")}
             onCreated={(next) => {

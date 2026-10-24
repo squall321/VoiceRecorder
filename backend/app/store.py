@@ -165,7 +165,7 @@ def create_project(**values: Any) -> str:
         "engine": values.get("engine") or config.DEFAULT_ENGINE,
         "language": values.get("language") or config.DEFAULT_LANGUAGE,
         "voice_id": values.get("voice_id"),
-        "speed": values.get("speed", 1.0),
+        "speed": values.get("speed", config.DEFAULT_SPEED),
         "gap_ms": values.get("gap_ms", config.DEFAULT_GAP_MS),
         "read_numbers": 1 if values.get("read_numbers", True) else 0,
         "exaggeration": values.get("exaggeration", 0.5),

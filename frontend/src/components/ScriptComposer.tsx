@@ -13,19 +13,20 @@ const SAMPLE = `01 오프닝 (0:00–0:08) "질문 하나가 의사결정문이 
 interface Props {
   engines: Engine[];
   defaultEngine: string;
+  defaultSpeed: number;
   voices: Voice[];
   onCreated: (payload: ProjectPayload) => void;
   onCancel: () => void;
 }
 
-export function ScriptComposer({ engines, defaultEngine, voices, onCreated, onCancel }: Props) {
+export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, onCreated, onCancel }: Props) {
   const [title, setTitle] = useState("");
   const [raw, setRaw] = useState("");
   const [parsed, setParsed] = useState<ParseResponse | null>(null);
   const [engine, setEngine] = useState(pickDefaultEngine(engines, defaultEngine)?.id ?? defaultEngine);
   const [voiceId, setVoiceId] = useState("");
   const [gapMs, setGapMs] = useState(400);
-  const [speed, setSpeed] = useState(1.0);
+  const [speed, setSpeed] = useState(defaultSpeed);
   const [readNumbers, setReadNumbers] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

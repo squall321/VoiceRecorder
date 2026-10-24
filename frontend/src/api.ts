@@ -35,7 +35,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  engines: () => request<{ engines: Engine[]; default: string }>("api/engines"),
+  engines: () =>
+    request<{ engines: Engine[]; default: string; default_speed: number }>("api/engines"),
 
   parse: (raw_script: string) =>
     request<ParseResponse>("api/scripts/parse", {

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from . import config
+
 
 class ParseRequest(BaseModel):
     raw_script: str = Field(default="", max_length=200_000)
@@ -32,7 +34,7 @@ class ProjectCreate(BaseModel):
     engine: str | None = None
     language: str | None = None
     voice_id: str | None = None
-    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    speed: float = Field(default=config.DEFAULT_SPEED, ge=0.5, le=2.0)
     gap_ms: int = Field(default=400, ge=0, le=10_000)
     read_numbers: bool = True
     exaggeration: float = Field(default=0.5, ge=0.0, le=2.0)
@@ -110,7 +112,7 @@ class TtsRequest(BaseModel):
     engine: str | None = None
     language: str | None = None
     voice_id: str | None = None
-    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    speed: float = Field(default=config.DEFAULT_SPEED, ge=0.5, le=2.0)
     read_numbers: bool = True
     exaggeration: float = Field(default=0.5, ge=0.0, le=2.0)
     cfg_weight: float = Field(default=0.5, ge=0.0, le=1.0)

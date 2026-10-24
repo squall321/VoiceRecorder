@@ -116,6 +116,12 @@ def test_melo_is_the_default_engine(client):
     assert _create(client)["project"]["engine"] == "melo"
 
 
+def test_default_speed_is_1_2(client):
+    # 사용자의 표준 속도 — 속도를 안 넘긴 새 프로젝트가 1.2배, 화면 첫 값도 서버가 알려 준다
+    assert client.get("/api/engines").json()["default_speed"] == 1.2
+    assert _create(client)["project"]["speed"] == 1.2
+
+
 def test_parse_endpoint_returns_scenes_with_targets(client):
     body = client.post("/api/scripts/parse", json={"raw_script": SCRIPT}).json()
 
@@ -188,7 +194,7 @@ def test_speed_change_does_not_call_the_model_again(client, stub_engine):
     _synthesize(client, pid)
     scenes = client.get(f"/api/projects/{pid}").json()["scenes"]
     target = scenes[0]
-    original = target["duration_sec"]
+    raw = target["raw_duration_sec"]  # 속도 반영 전 원본 길이 — 프로젝트 기본 속도와 무관한 기준
     calls = len(stub_engine.calls)
 
     body = client.patch(f"/api/projects/{pid}/scenes/{target['id']}", json={"speed": 1.5}).json()
@@ -196,7 +202,7 @@ def test_speed_change_does_not_call_the_model_again(client, stub_engine):
 
     assert len(stub_engine.calls) == calls  # 모델 재호출 없음
     assert updated["status"] == "ready"
-    assert updated["duration_sec"] == pytest.approx(original / 1.5, rel=0.05)
+    assert updated["duration_sec"] == pytest.approx(raw / 1.5, rel=0.05)
 
 
 def test_apply_speed_unifies_all_scenes_including_overrides(client, stub_engine):

@@ -167,7 +167,9 @@ def test_codec_mp4_cannot_hold_is_reencoded(client, media):  # noqa: F811
 
 def test_narration_longer_than_video_is_reported(client, media):  # noqa: F811
     script = "0:00–0:05 " + "아주 긴 문장이 영상이 끝난 뒤에도 계속 이어집니다. " * 3 + "\n0:05 끝."
-    pid = client.post("/api/projects", json={"title": "긴 내레이션", "raw_script": script}).json()["project"]["id"]
+    # 속도를 1.0 으로 못 박는다 — 기본 속도(1.2)가 바뀌어도 '영상보다 길다' 조건이 유지되게
+    body = {"title": "긴 내레이션", "raw_script": script, "speed": 1.0}
+    pid = client.post("/api/projects", json=body).json()["project"]["id"]
     _upload(client, pid, media["silent"])
     result = _dub(client, pid)["result"]
     assert result["beyond_video_sec"] > 0
