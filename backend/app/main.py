@@ -379,6 +379,9 @@ def export(project_id: str) -> dict:
 # ── 음성 씌우기 (영상 더빙) ─────────────────────────────────────────────────
 
 
+_VIDEO_SUFFIXES = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi"}
+
+
 def _dub_running(project_id: str) -> bool:
     # 최신 작업만 보면, 더빙 작업 뒤에 씬 합성이 줄 서 있을 때 진행 중인 더빙이 가려져 영상 교체가 통과됐다
     return store.has_active_job(project_id, "dub")
@@ -395,7 +398,10 @@ async def upload_video(project_id: str, request: Request, filename: str = "") ->
     if _dub_running(project_id):
         raise HTTPException(status_code=409, detail="음성 입히는 작업이 끝난 뒤에 영상을 바꾸세요")
 
-    suffix = "".join(c for c in Path(filename).suffix.lower() if c.isalnum() or c == ".")[:10] or ".mp4"
+    # 저장 확장자는 영상 형식만 — 'x.html' 로 올린 파일이 text/html 로 서빙되면 포털 출처에서 스크립트가 돈다
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _VIDEO_SUFFIXES:
+        suffix = ".mp4"
     # 영상 폴더 밖(같은 /data 파일시스템)에 받는다 — store_upload 가 이전 영상 폴더를 통째로 지운다
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     upload = config.UPLOADS_DIR / f"video-{store.new_id()}{suffix}"
@@ -426,8 +432,11 @@ def get_video(project_id: str):
     path = video.source_path(project_id)
     if path is None:
         raise HTTPException(status_code=404, detail="올린 영상이 없습니다")
-    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return FileResponse(path, media_type=media_type)
+    media_type = mimetypes.guess_type(path.name)[0] or ""
+    if not media_type.startswith("video/"):
+        media_type = "application/octet-stream"
+    # 브라우저가 내용을 보고 형식을 바꿔 해석(스니핑)하지 않게 한다
+    return FileResponse(path, media_type=media_type, headers={"X-Content-Type-Options": "nosniff"})
 
 
 @app.delete("/api/projects/{project_id}/video")

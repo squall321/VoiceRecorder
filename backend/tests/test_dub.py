@@ -212,3 +212,15 @@ def test_project_list_shows_video_and_dub_badges(client, media):  # noqa: F811
     assert (row()["has_video"], row()["has_dub"]) == (True, False)
     _dub(client, pid)
     assert (row()["has_video"], row()["has_dub"]) == (True, True)
+
+
+def test_upload_suffix_cannot_turn_video_into_html(client, media):  # noqa: F811
+    # ?filename=x.html 로 올려도 영상 확장자로 저장하고, 영상 응답은 video/* 또는 octet-stream + nosniff
+    pid = _project(client)
+    response = client.put(f"/api/projects/{pid}/video?filename=evil.html", content=media["mp4"].read_bytes())
+    assert response.status_code == 200
+    assert response.json()["video"]["stored_name"] == "source.mp4"
+
+    served = client.get(f"/api/projects/{pid}/video")
+    assert served.headers["content-type"] == "video/mp4"
+    assert served.headers["x-content-type-options"] == "nosniff"
