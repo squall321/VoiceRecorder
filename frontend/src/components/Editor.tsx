@@ -34,6 +34,8 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
   // 타임코드 자동 맞춤 가능 조건: 전 씬 합성 완료 + 모든 씬에 목표 길이 있음
   const allReady = scenes.length > 0 && scenes.every((s) => s.status === "ready");
   const hasTimecodes = scenes.length > 0 && scenes.every((s) => s.target_duration_sec != null);
+  // 마지막 음성 입힌 영상에서 시각을 넘친 씬 — 씬 카드에 바로 보여 고칠 곳을 찾게 한다
+  const overrunById = new Map((payload.dub?.overruns ?? []).map((o) => [o.scene_id, o]));
 
   async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     try {
@@ -291,6 +293,8 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
         <SceneCard
           key={scene.id}
           scene={scene}
+          overrun={overrunById.get(scene.id)}
+          overrunStale={payload.dub?.stale ?? false}
           projectId={project.id}
           voices={voices}
           busy={busy}

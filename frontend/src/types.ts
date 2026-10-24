@@ -35,6 +35,9 @@ export interface Project {
   created_at: number;
   updated_at: number;
   scene_count?: number;
+  // 목록에서만 온다 — 영상을 올렸는지 · 음성 입힌 영상을 만들었는지
+  has_video?: boolean;
+  has_dub?: boolean;
 }
 
 export interface Scene {

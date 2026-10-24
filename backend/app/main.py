@@ -158,7 +158,12 @@ def parse(payload: ParseRequest) -> ParseResponse:
 
 @app.get("/api/projects")
 def list_projects() -> dict:
-    return {"projects": store.list_projects()}
+    # 목록에서 영상을 올렸는지·음성을 입혔는지 보이게 한다 (파일 존재만 본다 — 가볍다)
+    projects = store.list_projects()
+    for project in projects:
+        project["has_video"] = video.read_meta(project["id"]) is not None
+        project["has_dub"] = (config.dub_dir(project["id"]) / "dubbed.mp4").exists()
+    return {"projects": projects}
 
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED)

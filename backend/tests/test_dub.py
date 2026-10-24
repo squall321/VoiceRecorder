@@ -199,3 +199,16 @@ def test_video_change_blocked_while_any_dub_job_is_pending(client, media):  # no
     assert response.status_code == 409
     assert client.delete(f"/api/projects/{pid}/video").status_code == 409
     assert client.post(f"/api/projects/{pid}/dub", json={}).status_code == 409
+
+
+def test_project_list_shows_video_and_dub_badges(client, media):  # noqa: F811
+    pid = _project(client)
+
+    def row():
+        return next(p for p in client.get("/api/projects").json()["projects"] if p["id"] == pid)
+
+    assert (row()["has_video"], row()["has_dub"]) == (False, False)
+    _upload(client, pid, media["mp4"])
+    assert (row()["has_video"], row()["has_dub"]) == (True, False)
+    _dub(client, pid)
+    assert (row()["has_video"], row()["has_dub"]) == (True, True)

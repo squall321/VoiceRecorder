@@ -169,6 +169,15 @@ export function DubPanel({ payload, job, busy, onPayload, onJob, onError }: Prop
   );
 }
 
+// 넘친 문장을 누르면 그 씬 카드로 스크롤하고 잠깐 강조한다
+function jumpToScene(sceneId: string) {
+  const card = document.getElementById(`scene-${sceneId}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("is-selected");
+  window.setTimeout(() => card.classList.remove("is-selected"), 2000);
+}
+
 function DubResult({ projectId, dub }: { projectId: string; dub: DubInfo }) {
   const clean = dub.overruns.length === 0 && dub.beyond_video_sec <= 0;
   return (
@@ -208,7 +217,9 @@ function DubResult({ projectId, dub }: { projectId: string; dub: DubInfo }) {
               <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
                 {dub.overruns.map((o) => (
                   <li key={o.scene_id}>
-                    {String(o.number ?? o.position + 1).padStart(2, "0")} {o.title ?? ""}{" "}
+                    <button className="link-button" onClick={() => jumpToScene(o.scene_id)} title="그 씬으로 이동">
+                      {String(o.number ?? o.position + 1).padStart(2, "0")} {o.title ?? "씬"}
+                    </button>{" "}
                     <span className="mono">
                       {formatSeconds(o.start_sec)}–{formatSeconds(o.end_sec)}
                     </span>

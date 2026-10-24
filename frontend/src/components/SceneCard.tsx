@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { urls } from "../api";
 import { formatDrift, formatSeconds, statusLabel, suggestSpeed } from "../format";
-import type { Scene, Voice } from "../types";
+import type { DubOverrun, Scene, Voice } from "../types";
 
 interface Props {
   scene: Scene;
+  // 마지막 음성 입힌 영상에서 이 씬이 대본 시각을 넘쳤으면 그 내용 (stale 이면 지난 결과 기준)
+  overrun?: DubOverrun;
+  overrunStale?: boolean;
   projectId: string;
   voices: Voice[];
   busy: boolean;
@@ -20,6 +23,8 @@ interface Props {
 
 export function SceneCard({
   scene,
+  overrun,
+  overrunStale = false,
   projectId,
   voices,
   busy,
@@ -50,7 +55,7 @@ export function SceneCard({
   const dirty = text !== scene.text;
 
   return (
-    <div className="scene">
+    <div className="scene" id={`scene-${scene.id}`}>
       <div className="scene-head">
         <span className="scene-num mono">
           {String(scene.number ?? scene.position + 1).padStart(2, "0")}
@@ -115,6 +120,16 @@ export function SceneCard({
               )}
             </span>
           ))}
+        </div>
+      )}
+
+      {overrun && (
+        <div className="latin-warning">
+          ⚠ 음성 입힌 영상에서
+          {overrun.pushed_sec > 0 && ` ${overrun.pushed_sec.toFixed(1)}초 늦게 시작`}
+          {overrun.pushed_sec > 0 && overrun.over_sec > 0 && " ·"}
+          {overrun.over_sec > 0 && ` 끝이 ${overrun.over_sec.toFixed(1)}초 넘침`}
+          {overrunStale ? " (지난 결과 기준)" : ""} — 원고를 줄이거나 이 씬 속도를 올린 뒤 다시 만드세요.
         </div>
       )}
 

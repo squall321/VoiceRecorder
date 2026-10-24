@@ -177,6 +177,17 @@ export default function App() {
                 <div key={project.id} className="project-row" onClick={() => open(project.id)}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <strong>{project.title}</strong>
+                    {project.has_dub ? (
+                      <span className="badge ready" style={{ marginLeft: 6 }}>
+                        음성 입힌 영상
+                      </span>
+                    ) : (
+                      project.has_video && (
+                        <span className="badge info" style={{ marginLeft: 6 }}>
+                          영상 있음
+                        </span>
+                      )
+                    )}
                     <div className="scene-meta">
                       씬 {project.scene_count ?? 0}개 · {project.engine} ·{" "}
                       {new Date(project.updated_at * 1000).toLocaleString("ko-KR")}
