@@ -54,3 +54,8 @@ class TTSEngine(ABC):
     def warmup(self) -> None:
         """모델을 미리 올려 첫 합성 지연을 없앤다. 실패해도 치명적이지 않다."""
         return None
+
+    def is_warm(self) -> bool:
+        """모델이 이미 올라와 있어 곧바로 합성되는지. False 면 첫 합성이 모델 로딩(수십 초~1분)만큼 걸린다
+        — 진행 문구에 알려 '멈춘 것처럼' 보이지 않게 한다."""
+        return True

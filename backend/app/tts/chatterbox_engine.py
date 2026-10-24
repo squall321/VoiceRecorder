@@ -82,6 +82,9 @@ class ChatterboxEngine(TTSEngine):
             detail += " · 첫 합성 시 모델 로딩"
         return EngineStatus(True, detail, device)
 
+    def is_warm(self) -> bool:
+        return self._model is not None
+
     def languages(self) -> dict[str, str]:
         try:
             from chatterbox.mtl_tts import SUPPORTED_LANGUAGES

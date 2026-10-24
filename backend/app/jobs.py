@@ -8,6 +8,7 @@ import threading
 from dataclasses import dataclass, field
 
 from . import store, synth
+from .tts import get_engine
 
 log = logging.getLogger("voicerecorder.jobs")
 
@@ -114,12 +115,19 @@ class JobRunner:
     def _synthesize_scenes(self, task: _Task, project: dict) -> list[str]:
         """task.scene_ids 를 차례로 합성하고 실패 사유 목록을 돌려준다."""
         failures: list[str] = []
+        # 모델이 아직 안 올라왔으면 첫 씬이 1분 남짓 0% 에 머문다 — 멈춘 줄 알지 않게 문구로 알린다
+        try:
+            cold = not get_engine(project["engine"]).is_warm()
+        except KeyError:
+            cold = False
         for done, scene_id in enumerate(task.scene_ids):
             scene = store.get_scene(scene_id)
             if scene is None:
                 continue
             label = scene.get("title") or (scene["text"][:24] + "…")
-            store.update_job(task.job_id, current=f"{scene['position'] + 1}. {label}", done=done)
+            note = " · 모델 불러오는 중(처음 한 번 1분 남짓)" if cold else ""
+            cold = False
+            store.update_job(task.job_id, current=f"{scene['position'] + 1}. {label}{note}", done=done)
             try:
                 synth.synthesize_scene(project, scene)
             except Exception as exc:  # noqa: BLE001 - 한 씬이 실패해도 나머지는 계속한다

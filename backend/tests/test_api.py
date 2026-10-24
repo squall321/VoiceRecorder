@@ -519,3 +519,24 @@ def test_parse_endpoint_includes_reading(client):
     body = client.post("/api/scripts/parse", json={"raw_script": READING_SCRIPT}).json()
     assert body["scenes"][0]["reading"] == "AI → 에이아이 · 6만 → 육만"
     assert body["scenes"][1]["reading"] is None
+
+
+def test_first_synthesis_label_says_model_is_loading(client, stub_engine, monkeypatch):
+    # 모델이 아직 안 올라온 엔진은 첫 씬이 오래 걸린다 — 진행 문구로 알려 '멈춘 것처럼' 보이지 않게
+    from app import jobs
+
+    labels: list[str] = []
+    original = jobs.store.update_job
+
+    def record(job_id, **patch):
+        if patch.get("current"):
+            labels.append(patch["current"])
+        return original(job_id, **patch)
+
+    monkeypatch.setattr(stub_engine, "is_warm", lambda: False, raising=False)
+    monkeypatch.setattr(jobs.store, "update_job", record)
+    project = _create(client)
+    _synthesize(client, project["project"]["id"])
+
+    assert "모델 불러오는 중" in labels[0]
+    assert all("모델 불러오는 중" not in label for label in labels[1:])

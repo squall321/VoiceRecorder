@@ -49,7 +49,13 @@ class CosyEngine(TTSEngine):
 
     def __init__(self) -> None:
         self._worker: subprocess.Popen | None = None
+        # 한 번이라도 합성에 성공한 워커 — 모델이 올라와 있다는 표시
+        self._warm_worker: subprocess.Popen | None = None
         self._lock = threading.Lock()
+
+    def is_warm(self) -> bool:
+        worker = self._worker
+        return worker is not None and worker is self._warm_worker and worker.poll() is None
 
     def status(self) -> EngineStatus:
         if not COSY_PYTHON.exists():
@@ -124,6 +130,7 @@ class CosyEngine(TTSEngine):
         response = json.loads(line)
         if not response.get("ok"):
             raise RuntimeError(f"CosyVoice 합성 실패: {response.get('error')}")
+        self._warm_worker = worker
         return probe_duration(out_wav)
 
 
