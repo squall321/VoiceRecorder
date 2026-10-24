@@ -16,6 +16,12 @@ export function formatDrift(drift: number | null): { text: string; className: st
   return { text: `${rounded.toFixed(1)}초 부족`, className: "drift under" };
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)}GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)}MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))}KB`;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   ready: "완료",
   stale: "변경됨",

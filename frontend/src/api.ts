@@ -108,6 +108,43 @@ export const api = {
   exportProject: (id: string) =>
     request<{ job_id: string }>(`api/projects/${id}/export`, { method: "POST" }),
 
+  // 영상은 수백 MB 라 XHR 로 올린다 — 업로드 진행률 이벤트가 fetch 에는 없다.
+  // 바디는 파일 원본 그대로(multipart 아님), 파일 이름은 쿼리로 넘긴다.
+  uploadVideo: (id: string, file: File, onProgress: (ratio: number) => void) =>
+    new Promise<ProjectPayload>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", `api/projects/${id}/video?filename=${encodeURIComponent(file.name)}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded / event.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText) as ProjectPayload);
+          return;
+        }
+        let detail = `${xhr.status} ${xhr.statusText}`;
+        try {
+          const body = JSON.parse(xhr.responseText);
+          if (typeof body?.detail === "string") detail = body.detail;
+        } catch {
+          /* 본문이 JSON 이 아니면 상태줄을 그대로 쓴다 */
+        }
+        reject(new Error(detail));
+      };
+      xhr.onerror = () => reject(new Error("영상 업로드 중 연결이 끊겼습니다"));
+      xhr.send(file);
+    }),
+
+  deleteVideo: (id: string) =>
+    request<ProjectPayload>(`api/projects/${id}/video`, { method: "DELETE" }),
+
+  // 음성 입힌 영상 만들기 — 미생성 씬 합성 → 타임코드 배치 → 먹싱
+  dub: (id: string, originalVolume: number) =>
+    request<{ job_id: string; synthesize_count: number }>(`api/projects/${id}/dub`, {
+      method: "POST",
+      body: JSON.stringify({ original_volume: originalVolume }),
+    }),
+
   job: (jobId: string) => request<Job>(`api/jobs/${jobId}`),
 
   listVoices: () => request<{ voices: Voice[] }>("api/voices"),
@@ -140,4 +177,8 @@ export const urls = {
   voiceAudio: (voiceId: string) => `api/voices/${voiceId}/audio`,
   exportAudio: (projectId: string) => `api/projects/${projectId}/export/audio`,
   exportSrt: (projectId: string) => `api/projects/${projectId}/export/srt`,
+  video: (projectId: string) => `api/projects/${projectId}/video`,
+  dubVideo: (projectId: string) => `api/projects/${projectId}/dub/video`,
+  dubAudio: (projectId: string) => `api/projects/${projectId}/dub/audio`,
+  dubSrt: (projectId: string) => `api/projects/${projectId}/dub/srt`,
 };

@@ -31,10 +31,12 @@ export function SceneCard({
   onDelete,
 }: Props) {
   const [text, setText] = useState(scene.text);
+  const [reading, setReading] = useState(scene.reading ?? "");
   const [open, setOpen] = useState(false);
 
   // 서버가 새 값을 주면(재파싱·재정렬 등) 편집 중이 아닌 한 따라간다
   useEffect(() => setText(scene.text), [scene.id, scene.text]);
+  useEffect(() => setReading(scene.reading ?? ""), [scene.id, scene.reading]);
 
   const drift = formatDrift(scene.drift_sec);
   const fit = suggestSpeed(scene.raw_duration_sec, scene.target_duration_sec);
@@ -65,8 +67,27 @@ export function SceneCard({
         onBlur={() => dirty && onPatch({ text })}
       />
 
+      <div className="reading-row">
+        <span className="reading-label">읽는 법</span>
+        <input
+          type="text"
+          value={reading}
+          placeholder="예: AI → 에이아이 · 응력 → 응녁  (자막은 그대로, 소리만 바뀝니다)"
+          onChange={(event) => setReading(event.target.value)}
+          onBlur={() => reading !== (scene.reading ?? "") && onPatch({ reading })}
+          onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+        />
+      </div>
+
       {scene.normalized_text !== scene.text && (
         <div className="normalized">읽는 소리: {scene.normalized_text}</div>
+      )}
+
+      {scene.unread_latin.length > 0 && (
+        <div className="latin-warning">
+          ⚠ 영문 {scene.unread_latin.join(", ")} — 합성기가 건너뛸 수 있습니다. 읽는 법에 「
+          {scene.unread_latin[0]} → 한글 소리」처럼 적어 주세요.
+        </div>
       )}
 
       {scene.error && <div className="scene-error">{scene.error}</div>}

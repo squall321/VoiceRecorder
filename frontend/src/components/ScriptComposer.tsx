@@ -75,7 +75,9 @@ export function ScriptComposer({ engines, voices, onCreated, onCancel }: Props) 
         <div className="card">
           <h2>1. 스크립트 붙여넣기</h2>
           <p className="hint">
-            <code>01 오프닝 (0:00–0:08) "본문"</code> 형식을 그대로 인식합니다. 번호·타임코드가
+            <code>01 오프닝 (0:00–0:08) "본문"</code>, <code>0:05 본문</code>,{" "}
+            <code>- [6.1초] 본문</code>, <code>## 01 오프닝 (0:00–0:18)</code> 아래 문장들, 마크다운
+            표·엑셀에서 복사한 표(시작·끝·나레이션·읽는 법 열)를 그대로 인식합니다. 번호·타임코드가
             없으면 빈 줄 기준으로 씬을 나눕니다.
           </p>
           <label className="field" style={{ marginBottom: 12 }}>
@@ -130,9 +132,18 @@ export function ScriptComposer({ engines, voices, onCreated, onCancel }: Props) 
                         <span style={{ color: "var(--text-dim)" }}>
                           {scene.text.length > 60 ? `${scene.text.slice(0, 60)}…` : scene.text}
                         </span>
+                        {scene.reading && (
+                          <span className="badge info" style={{ marginLeft: 6 }} title={scene.reading}>
+                            읽는 법
+                          </span>
+                        )}
                       </span>
-                      {scene.target_duration_sec !== null && (
-                        <span className="scene-meta">{formatSeconds(scene.target_duration_sec)}</span>
+                      {scene.target_start_sec !== null && (
+                        <span className="scene-meta mono">
+                          {formatSeconds(scene.target_start_sec)}
+                          {scene.target_duration_sec !== null &&
+                            ` · ${formatSeconds(scene.target_duration_sec)}`}
+                        </span>
                       )}
                     </li>
                   ))}

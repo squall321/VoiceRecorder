@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, urls } from "../api";
 import { formatSeconds } from "../format";
 import type { Engine, FitReport, Job, ProjectPayload, Voice } from "../types";
+import { DubPanel } from "./DubPanel";
 import { SceneCard } from "./SceneCard";
 
 interface Props {
@@ -112,8 +113,8 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
               <span style={{ width: `${job!.total ? (job!.done / job!.total) * 100 : 5}%` }} />
             </div>
             <p className="hint" style={{ margin: 0 }}>
-              {job!.kind === "export" ? "병합 중" : "합성 중"} · {job!.current ?? "준비"} (
-              {job!.done}/{job!.total})
+              {job!.kind === "export" ? "병합 중" : job!.kind === "dub" ? "음성 입히는 중" : "합성 중"} ·{" "}
+              {job!.current ?? "준비"} ({job!.done}/{job!.total})
             </p>
           </>
         )}
@@ -162,6 +163,15 @@ export function Editor({ payload, engines, voices, job, onPayload, onJob, onBack
           </div>
         )}
       </div>
+
+      <DubPanel
+        payload={payload}
+        job={job}
+        busy={busy}
+        onPayload={onPayload}
+        onJob={onJob}
+        onError={onError}
+      />
 
       {showScript && (
         <div className="card">

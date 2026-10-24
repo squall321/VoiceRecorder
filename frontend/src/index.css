@@ -482,6 +482,74 @@ audio {
   vertical-align: middle;
 }
 
+/* ── 음성 씌우기 ─────────────────────────────────────────────────────── */
+
+.dub-media {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.dub-media video,
+.dub-result video {
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+  border-radius: 8px;
+  display: block;
+}
+
+.dub-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.dropzone:hover,
+.dropzone.over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.reading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.reading-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.latin-warning {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+@media (max-width: 860px) {
+  .dub-media {
+    grid-template-columns: 1fr;
+  }
+}
+
 .mono {
   font-variant-numeric: tabular-nums;
 }

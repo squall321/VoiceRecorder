@@ -11,6 +11,7 @@ export interface ParsedScene {
   target_end_sec: number | null;
   target_duration_sec: number | null;
   char_count: number;
+  reading: string | null;
 }
 
 export interface ParseResponse {
@@ -43,7 +44,11 @@ export interface Scene {
   number: number | null;
   title: string | null;
   text: string;
+  // 읽는 법 — 'AI → 에이아이 · 6만 → 육만'. 자막(text)은 그대로, 합성 소리만 바뀐다
+  reading: string | null;
   normalized_text: string;
+  // 정규화 뒤에도 남은 영문 — 한국어 합성기가 건너뛸 수 있다
+  unread_latin: string[];
   target_start_sec: number | null;
   target_end_sec: number | null;
   target_duration_sec: number | null;
@@ -71,7 +76,7 @@ export interface Scene {
 export interface Job {
   id: string;
   project_id: string;
-  kind: "synthesize" | "export";
+  kind: "synthesize" | "export" | "dub";
   status: "queued" | "running" | "done" | "error";
   total: number;
   done: number;
@@ -90,6 +95,48 @@ export interface FitReport {
   }[];
 }
 
+export interface VideoInfo {
+  filename: string;
+  duration_sec: number;
+  width: number | null;
+  height: number | null;
+  video_codec: string | null;
+  has_audio: boolean;
+  size_bytes: number;
+  uploaded_at: number;
+}
+
+// 대본 시각에 못 맞춘 문장 — 앞 문장이 길어 밀렸거나(pushed) 목표 끝을 넘겼다(over)
+export interface DubOverrun {
+  scene_id: string;
+  position: number;
+  number: number | null;
+  title: string | null;
+  text: string;
+  target_start_sec: number | null;
+  target_end_sec: number | null;
+  start_sec: number;
+  end_sec: number;
+  pushed_sec: number;
+  over_sec: number;
+}
+
+export interface DubInfo {
+  video_sec: number;
+  narration_end_sec: number;
+  total_sec: number;
+  beyond_video_sec: number;
+  scene_count: number;
+  overruns: DubOverrun[];
+  original_volume: number;
+  video_copied: boolean;
+  original_mixed: boolean;
+  mp4_bytes: number;
+  created_at: number;
+  // 만든 뒤 대본·음성·영상이 바뀌었다
+  stale: boolean;
+}
+
 export interface ProjectPayload {
   project: Project;
   scenes: Scene[];
@@ -97,6 +144,8 @@ export interface ProjectPayload {
   ready_count: number;
   job: Job | null;
   fit_report?: FitReport;
+  video: VideoInfo | null;
+  dub: DubInfo | null;
 }
 
 export interface Engine {
