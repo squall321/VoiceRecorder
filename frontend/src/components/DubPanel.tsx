@@ -25,7 +25,8 @@ export function DubPanel({ payload, job, busy, onPayload, onJob, onError }: Prop
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [volume, setVolume] = useState(0);
+  // 다시 만들 때는 지난번 원본 소리 설정을 그대로 쓴다
+  const [volume, setVolume] = useState(dub?.original_volume ?? 0);
 
   const pendingCount = scenes.filter((s) => s.status !== "ready").length;
   const timed = scenes.some((s) => s.target_start_sec !== null);
@@ -212,7 +213,8 @@ function DubResult({ projectId, dub }: { projectId: string; dub: DubInfo }) {
                       {formatSeconds(o.start_sec)}–{formatSeconds(o.end_sec)}
                     </span>
                     {o.pushed_sec > 0 && ` · ${o.pushed_sec.toFixed(1)}초 늦게 시작`}
-                    {o.over_sec > 0 && ` · 끝 ${o.over_sec.toFixed(1)}초 넘침`} — {o.text}…
+                    {o.over_sec > 0 && ` · 끝 ${o.over_sec.toFixed(1)}초 넘침`} — {o.text}
+                    {o.text.length >= 40 ? "…" : ""}
                   </li>
                 ))}
               </ul>
