@@ -95,11 +95,8 @@
       포털 인스턴스에서 세 엔진 준비·유월/응녁 읽기·오독 안내·더빙 mp4·x.html 업로드도 video/mp4+nosniff·새 화면 번들 확인
 
 ## 남은 일 (다음 세션)
-- [ ] **GPU 실합성 검증** — 검증 당시 GPU 를 vLLM(13GB)이 점유해 CPU 로만 확인했다.
-      VRAM 이 3GB 이상 나면 `backend/.venv/bin/python scripts/smoke_chatterbox.py` 로 재확인.
-      CPU RTF 는 3.4 (10씬 4분), GPU 로는 훨씬 빨라질 것.
-- [ ] **MeloTTS 사이드카 실제 설치·검증** — `scripts/setup-melo.sh` 는 작성만 했고
-      실행해 보지 않았다. Chatterbox CPU 폴백이 있어 없어도 앱은 돈다.
-- [ ] **HEAXHub 리포 커밋** — `integrations/voice-recorder/.portal/manifest.yaml` 을
-      배치만 하고 커밋하지 않았다 (별도 리포라 사용자 확인 후).
+- [x] **GPU 실합성 검증** — 2026-10-24 RTX 5070 Ti 에서 `scripts/smoke_chatterbox.py` 통과(device=cuda).
+      첫 합성 10.5초(모델 로딩 포함), 이후 RTF 0.25 — CPU RTF 3.4 보다 약 13배 빠르다. 소리 크기 정상(평균 -16dB).
+- [x] **MeloTTS 사이드카 실제 설치·검증** — 기본 엔진으로 로컬·포털에서 합성·더빙까지 확인.
+- [x] **HEAXHub 리포 커밋** — `integrations/voice-recorder/.portal/manifest.yaml` 커밋됨 (HEAXHub e254e76).
 - [ ] `scripts/models-to-drive.sh` 실제 업로드 (3GB, 온라인 호스트에서)
