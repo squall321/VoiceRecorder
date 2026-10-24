@@ -76,6 +76,8 @@
 - [x] 포털 발음 사전 기본 4개 (HWAX·응력·대책·전위치)
 - [x] 포털에 Chatterbox(3GB)·CosyVoice(9GB)·wetext FST 반입 — 포털 인스턴스에서 세 엔진 모두 원샷 합성 확인
 - [x] 기본 엔진 MeloTTS (config·화면 첫 선택·상단 배지·원샷 TTS·WDA 기본 폴백)
+- [x] 말 속도 기본값 1.2배 (새 프로젝트·원샷 TTS·화면 첫 값)
+- [x] HEAXHub 스캐너 중복 SIF 빌드 방지 — 슬러그별 flock, 겹치면 busy 로 건너뜀 (HEAXHub 628400d)
 
 ## 남은 일 (다음 세션)
 - [ ] **GPU 실합성 검증** — 검증 당시 GPU 를 vLLM(13GB)이 점유해 CPU 로만 확인했다.
