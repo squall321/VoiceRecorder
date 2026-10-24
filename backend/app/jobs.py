@@ -124,7 +124,8 @@ class JobRunner:
             scene = store.get_scene(scene_id)
             if scene is None:
                 continue
-            label = scene.get("title") or (scene["text"][:24] + "…")
+            text = scene["text"]
+            label = scene.get("title") or (text if len(text) <= 24 else text[:24] + "…")
             note = " · 모델 불러오는 중(처음 한 번 1분 남짓)" if cold else ""
             cold = False
             store.update_job(task.job_id, current=f"{scene['position'] + 1}. {label}{note}", done=done)

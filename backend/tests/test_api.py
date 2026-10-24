@@ -542,6 +542,28 @@ def test_first_synthesis_label_says_model_is_loading(client, stub_engine, monkey
     assert all("모델 불러오는 중" not in label for label in labels[1:])
 
 
+def test_progress_label_ellipsis_only_when_text_is_cut(client, stub_engine, monkeypatch):
+    # 제목 없는 씬은 본문 앞부분을 진행 문구로 쓴다 — 다 보이는 짧은 본문에 '…'를 붙이지 않는다
+    from app import jobs
+
+    labels: list[str] = []
+    original = jobs.store.update_job
+
+    def record(job_id, **patch):
+        if patch.get("current"):
+            labels.append(patch["current"])
+        return original(job_id, **patch)
+
+    monkeypatch.setattr(stub_engine, "is_warm", lambda: True, raising=False)
+    monkeypatch.setattr(jobs.store, "update_job", record)
+    raw = "짧은 문장입니다.\n\n이 문장은 진행 문구 한 줄에 다 들어가지 않을 만큼 길게 이어 씁니다."
+    body = client.post("/api/projects", json={"title": "라벨", "raw_script": raw}).json()
+    _synthesize(client, body["project"]["id"])
+
+    assert labels[0] == "1. 짧은 문장입니다."
+    assert labels[1].startswith("2. 이 문장은") and labels[1].endswith("…")
+
+
 def test_known_melo_misreads_are_hinted_until_reading_covers_them(client):
     # MeloTTS 가 [삼위]로 읽었던 '상위' — 씬에 알려 주고, 읽는 법으로 바꾸면 더는 알리지 않는다
     raw = '01 결과 (0:00–0:05) "상위 세 유형에 몰려 있습니다."'
