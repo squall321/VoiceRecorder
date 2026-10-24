@@ -375,8 +375,8 @@ def export(project_id: str) -> dict:
 
 
 def _dub_running(project_id: str) -> bool:
-    job = store.latest_job(project_id)
-    return bool(job and job["kind"] == "dub" and job["status"] in ("queued", "running"))
+    # 최신 작업만 보면, 더빙 작업 뒤에 씬 합성이 줄 서 있을 때 진행 중인 더빙이 가려져 영상 교체가 통과됐다
+    return store.has_active_job(project_id, "dub")
 
 
 @app.put("/api/projects/{project_id}/video")

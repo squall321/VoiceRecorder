@@ -184,3 +184,18 @@ def test_delete_video_removes_results(client, media):  # noqa: F811
     body = client.delete(f"/api/projects/{pid}/video").json()
     assert body["video"] is None and body["dub"] is None
     assert client.get(f"/api/projects/{pid}/dub/video").status_code == 404
+
+
+def test_video_change_blocked_while_any_dub_job_is_pending(client, media):  # noqa: F811
+    # 최신 작업만 보던 검사는 더빙 뒤에 줄 선 합성 작업에 가려 영상 교체를 통과시켰다
+    from app import store
+
+    pid = _project(client)
+    _upload(client, pid, media["mp4"])
+    store.create_job(pid, "dub", 3)  # 대기 중인 더빙(러너에 넣지 않은 기록만)
+    store.create_job(pid, "synthesize", 1)  # 그 뒤에 줄 선 다른 작업
+
+    response = client.put(f"/api/projects/{pid}/video?filename=again.mp4", content=media["silent"].read_bytes())
+    assert response.status_code == 409
+    assert client.delete(f"/api/projects/{pid}/video").status_code == 409
+    assert client.post(f"/api/projects/{pid}/dub", json={}).status_code == 409

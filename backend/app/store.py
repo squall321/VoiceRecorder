@@ -464,6 +464,16 @@ def get_job(job_id: str) -> dict | None:
     return job
 
 
+def has_active_job(project_id: str, kind: str) -> bool:
+    """그 프로젝트에 대기·진행 중인 kind 작업이 하나라도 있는지 (최신 작업만 보면 뒤에 줄 선 작업에 가려진다)."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM jobs WHERE project_id = ? AND kind = ? AND status IN ('queued', 'running') LIMIT 1",
+            (project_id, kind),
+        ).fetchone()
+    return row is not None
+
+
 def latest_job(project_id: str) -> dict | None:
     with connect() as conn:
         row = conn.execute(
