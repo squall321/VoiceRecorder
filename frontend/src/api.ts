@@ -13,13 +13,19 @@ import type {
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers:
-      init?.body instanceof FormData
-        ? init?.headers
-        : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers:
+        init?.body instanceof FormData
+          ? init?.headers
+          : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // 브라우저는 연결 실패를 'Failed to fetch' 로만 알려 준다 — 사용자가 알아들을 말로 바꾼다
+    throw new Error("서버에 연결하지 못했습니다 — 잠시 뒤 다시 시도해 주세요");
+  }
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {
@@ -113,9 +119,13 @@ export const api = {
 
   // 영상은 수백 MB 라 XHR 로 올린다 — 업로드 진행률 이벤트가 fetch 에는 없다.
   // 바디는 파일 원본 그대로(multipart 아님), 파일 이름은 쿼리로 넘긴다.
-  uploadVideo: (id: string, file: File, onProgress: (ratio: number) => void) =>
+  uploadVideo: (id: string, file: File, onProgress: (ratio: number) => void, signal?: AbortSignal) =>
     new Promise<ProjectPayload>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      signal?.addEventListener("abort", () => {
+        xhr.abort();
+        reject(new Error("영상 업로드를 취소했습니다"));
+      });
       xhr.open("PUT", `api/projects/${id}/video?filename=${encodeURIComponent(file.name)}`);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(event.loaded / event.total);

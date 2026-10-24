@@ -1,6 +1,6 @@
 // 우측 드로어 — 보이스 프로필 업로드/관리, 발음 사전, 엔진 라이선스 정보
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, urls } from "../api";
 import type { DictionaryEntry, Engine, Voice } from "../types";
 
@@ -9,35 +9,49 @@ interface Props {
   voices: Voice[];
   dictionary: DictionaryEntry[];
   onClose: () => void;
-  onRefresh: () => void;
-  onError: (message: string) => void;
+  // 바뀐 사전·화자를 다시 받고, 열린 프로젝트의 '읽는 소리'도 새로 받는다
+  onRefresh: () => Promise<void> | void;
 }
 
-export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh, onError }: Props) {
+export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh }: Props) {
   const [voiceName, setVoiceName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState("");
   const [uploading, setUploading] = useState(false);
   const [source, setSource] = useState("");
   const [target, setTarget] = useState("");
+  // 드로어 안에서 난 오류는 드로어 안에 보인다 — 뒤 화면 배너는 가려져 안 보인다
+  const [error, setError] = useState("");
 
-  async function run(action: () => Promise<unknown>) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function run(action: () => Promise<unknown>): Promise<boolean> {
+    setError("");
     try {
       await action();
-      onRefresh();
+      await onRefresh();
+      return true;
     } catch (err) {
-      onError(String((err as Error).message ?? err));
+      setError(String((err as Error).message ?? err));
+      return false;
     }
   }
 
   async function upload() {
     if (!file) return;
     setUploading(true);
-    await run(() => api.uploadVoice(voiceName || file.name, file, transcript));
+    const ok = await run(() => api.uploadVoice(voiceName || file.name, file, transcript));
     setUploading(false);
-    setFile(null);
-    setVoiceName("");
-    setTranscript("");
+    if (ok) {
+      // 실패하면 적어 둔 이름·전사를 지우지 않는다 — 고쳐서 다시 올릴 수 있게
+      setFile(null);
+      setVoiceName("");
+      setTranscript("");
+    }
   }
 
   const cloningEngine = engines.find((e) => e.supports_voice_cloning && e.available);
@@ -45,20 +59,32 @@ export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer">
+      <aside className="drawer" role="dialog" aria-label="화자 · 발음 사전 설정">
         <div className="btn-row" style={{ marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>설정</h2>
           <span className="spacer" />
           <button className="btn small" onClick={onClose}>
-            닫기
+            닫기 (Esc)
           </button>
         </div>
+
+        {error && (
+          <div className="error-banner">
+            <span style={{ flex: 1 }}>{error}</span>
+            <button className="btn small" onClick={() => setError("")}>
+              닫기
+            </button>
+          </div>
+        )}
 
         <div className="card">
           <h2>화자 (참조 음성)</h2>
           <p className="hint">
             {cloningEngine
-              ? "3~10초 분량의 깨끗한 음성을 올리면 그 목소리로 내레이션을 만듭니다. wav·mp3·m4a 모두 됩니다."
+              ? `3~10초 분량의 깨끗한 음성을 올리면 그 목소리로 내레이션을 만듭니다(${engines
+                  .filter((e) => e.supports_voice_cloning && e.available)
+                  .map((e) => e.name)
+                  .join(" · ")} 에서만 — MeloTTS 는 화자 복제가 없습니다). wav·mp3·m4a 모두 됩니다.`
               : "현재 사용 가능한 엔진이 음성 복제를 지원하지 않습니다."}
           </p>
           <div className="grid" style={{ gap: 8 }}>
@@ -134,7 +160,7 @@ export function SettingsDrawer({ engines, voices, dictionary, onClose, onRefresh
             />
             <input
               type="text"
-              placeholder="읽는 소리 (에이치왁스)"
+              placeholder="읽는 소리 (하드웨어 에이엑스)"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
             />

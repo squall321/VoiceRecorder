@@ -16,6 +16,21 @@ export function formatDrift(drift: number | null): { text: string; className: st
   return { text: `${rounded.toFixed(1)}초 부족`, className: "drift under" };
 }
 
+/** 대본 시각 범위 표시 — '0:19–0:27', 끝이 없으면 '0:19~' */
+export function formatRange(start: number | null, end: number | null): string {
+  if (start === null) return "";
+  return end === null ? `${formatSeconds(start)}~` : `${formatSeconds(start)}–${formatSeconds(end)}`;
+}
+
+/** '…으로/…로' 조사 — 받침이 있으면(ㄹ 받침 제외) '으로' */
+export function withRo(word: string): string {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return `${word}로`;
+  const jong = code % 28;
+  return jong === 0 || jong === 8 ? `${word}로` : `${word}으로`;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)}GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)}MB`;

@@ -90,6 +90,12 @@ textarea {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  /* 키보드로도 목록에 돌아가게 버튼으로 바꿨다 — 버튼 기본 모양은 지운다 */
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  color: inherit;
 }
 
 .brand small {
@@ -391,6 +397,33 @@ label.field {
   transition: width 0.25s;
 }
 
+/* 진척이 0 인 동안(대기 · 모델 로딩) — 줄무늬가 흘러 멈춘 게 아님을 보인다 */
+.progress.indeterminate > span {
+  width: 100% !important;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent) 0 10px,
+    var(--accent-soft) 10px 20px
+  );
+  background-size: 28px 28px;
+  animation: progress-stripes 1s linear infinite;
+}
+
+@keyframes progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress.indeterminate > span {
+    animation: none;
+  }
+}
+
 /* ── 목록 ────────────────────────────────────────────────────────────── */
 
 .project-row {
@@ -464,6 +497,36 @@ label.field {
   display: flex;
   gap: 8px;
   align-items: flex-start;
+  /* 실패한 씬 목록처럼 여러 줄인 오류를 한 줄로 뭉개지 않는다 */
+  white-space: pre-wrap;
+}
+
+.warn-banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+/* 프로젝트 제목 — 눌러서 고친다 (내려받는 파일 이름에 쓰인다) */
+.title-input {
+  font-size: 17px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 6px;
+  width: auto;
+  min-width: 8em;
+  max-width: 100%;
+  flex: 1 1 12em;
+}
+
+.title-input:hover,
+.title-input:focus {
+  border-color: var(--border);
+  background: var(--surface);
 }
 
 .empty {

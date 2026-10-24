@@ -1,6 +1,7 @@
 // 화면 전환(목록 ↔ 새로 만들기 ↔ 편집)과 작업 진행률 폴링을 담당하는 최상위 컴포넌트
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { api } from "./api";
 import { Editor } from "./components/Editor";
 import { EngineStatus } from "./components/EngineStatus";
@@ -12,6 +13,14 @@ import type { DictionaryEntry, Engine, Job, Project, ProjectPayload, Voice } fro
 type View = "list" | "new" | "editor";
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppBody />
+    </ErrorBoundary>
+  );
+}
+
+function AppBody() {
   const [view, setView] = useState<View>("list");
   const [projects, setProjects] = useState<Project[]>([]);
   const [payload, setPayload] = useState<ProjectPayload | null>(null);
@@ -26,7 +35,12 @@ export default function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [error, setError] = useState("");
+  // 진행 확인 요청이 실패하는 동안 — 폴링은 멈추지 않고 간격을 늘려 다시 시도한다
+  const [connectionLost, setConnectionLost] = useState(false);
+  // 지금 열려 있는 프로젝트 — 다른 프로젝트의 작업 결과·응답이 이 화면을 덮어쓰지 않게 한다
+  const openProjectId = useRef<string | null>(null);
   const pollTimer = useRef<number | null>(null);
+  const pollJobId = useRef<string | null>(null);
 
   const loadShared = useCallback(async () => {
     try {
@@ -59,40 +73,64 @@ export default function App() {
     loadProjects();
   }, [loadShared, loadProjects]);
 
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) window.clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+    pollJobId.current = null;
+    setConnectionLost(false);
+  }, []);
+
+  // 열린 프로젝트의 응답만 화면에 반영한다 (늦게 도착한 다른 프로젝트 응답은 버린다)
+  const showPayload = useCallback((next: ProjectPayload) => {
+    if (next.project.id === openProjectId.current) setPayload(next);
+  }, []);
+
   // 작업이 끝날 때까지 1초 간격으로 폴링한다.
   // WebSocket 을 안 쓰는 이유: HEAXHub 는 Caddy 리버스 프록시 뒤 서브경로에 앱을 마운트하는데
   // WS 는 프록시 설정에 민감하다. 합성은 수십 초 단위라 폴링으로 충분하다.
+  // 요청이 한 번 실패했다고 멈추면 작업이 끝나도 화면이 '합성 중'에 갇힌다 — 간격을 늘려 계속 묻는다.
   const trackJob = useCallback(
     (jobId: string) => {
-      if (pollTimer.current) window.clearInterval(pollTimer.current);
+      stopPolling();
+      pollJobId.current = jobId;
+      let failures = 0;
       const tick = async () => {
+        if (pollJobId.current !== jobId) return;
         try {
           const next = await api.job(jobId);
+          if (pollJobId.current !== jobId) return;
+          failures = 0;
+          setConnectionLost(false);
+          if (next.project_id !== openProjectId.current) {
+            stopPolling(); // 다른 프로젝트로 옮겨 갔다 — 그 작업은 다시 열 때 이어 본다
+            return;
+          }
           setJob(next);
           if (next.status === "done" || next.status === "error") {
-            if (pollTimer.current) window.clearInterval(pollTimer.current);
-            pollTimer.current = null;
-            setPayload(await api.getProject(next.project_id));
+            stopPolling();
+            showPayload(await api.getProject(next.project_id));
+            return;
           }
-        } catch (err) {
-          if (pollTimer.current) window.clearInterval(pollTimer.current);
-          pollTimer.current = null;
-          setError(String((err as Error).message ?? err));
+        } catch {
+          failures += 1;
+          setConnectionLost(true);
         }
+        const delay = failures ? Math.min(1000 * 2 ** Math.min(failures, 4), 15000) : 1000;
+        pollTimer.current = window.setTimeout(tick, delay);
       };
       tick();
-      pollTimer.current = window.setInterval(tick, 1000);
     },
-    [],
+    [showPayload, stopPolling],
   );
 
-  useEffect(() => () => {
-    if (pollTimer.current) window.clearInterval(pollTimer.current);
-  }, []);
+  useEffect(() => () => stopPolling(), [stopPolling]);
 
   async function open(projectId: string) {
     try {
+      stopPolling();
+      openProjectId.current = projectId;
       const next = await api.getProject(projectId);
+      if (openProjectId.current !== projectId) return;
       setPayload(next);
       setJob(next.job);
       setView("editor");
@@ -102,6 +140,13 @@ export default function App() {
     } catch (err) {
       setError(String((err as Error).message ?? err));
     }
+  }
+
+  function backToList() {
+    stopPolling();
+    openProjectId.current = null;
+    setView("list");
+    loadProjects();
   }
 
   async function remove(projectId: string) {
@@ -114,25 +159,39 @@ export default function App() {
     }
   }
 
+  // 발음 사전·화자를 바꾸면 열린 프로젝트의 '읽는 소리'·상태도 바로 다시 받아 온다
+  async function refreshShared() {
+    await loadShared();
+    const pid = openProjectId.current;
+    if (pid) {
+      try {
+        showPayload(await api.getProject(pid));
+      } catch (err) {
+        setError(String((err as Error).message ?? err));
+      }
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
-        <span
-          className="brand"
-          onClick={() => {
-            setView("list");
-            loadProjects();
-          }}
-        >
+        <button type="button" className="brand" onClick={backToList}>
           🎙 VoiceRecorder <small>내레이션 음성 생성</small>
-        </span>
+        </button>
         <span className="spacer" />
         <EngineStatus engines={engines} defaultEngine={defaultEngine} />
         <button className="btn small" onClick={() => setDrawer(true)}>
           화자 · 발음 사전
         </button>
         {view !== "new" && (
-          <button className="btn small primary" onClick={() => setView("new")}>
+          <button
+            className="btn small primary"
+            onClick={() => {
+              stopPolling();
+              openProjectId.current = null;
+              setView("new");
+            }}
+          >
             + 새 내레이션
           </button>
         )}
@@ -144,6 +203,9 @@ export default function App() {
             ⚠ 서버에 ffmpeg 가 없어 속도 조절 · mp3 내보내기 · 영상에 음성 입히기가 동작하지 않습니다.
             관리자에게 알려 주세요.
           </div>
+        )}
+        {connectionLost && (
+          <div className="warn-banner">서버 연결이 잠시 끊겼습니다 — 작업 상태를 다시 확인하는 중입니다.</div>
         )}
         {error && (
           <div className="error-banner">
@@ -158,7 +220,7 @@ export default function App() {
           <div className="card">
             <h2>내레이션 프로젝트</h2>
             <p className="hint">
-              스크립트를 붙여넣으면 씬 단위로 나눠 음성을 만들고, mp3와 SRT 자막으로 내보냅니다.
+              대본을 붙여넣으면 씬 단위로 나눠 음성을 만들고, mp3·SRT 자막으로 내보내거나 영상에 바로 입힙니다.
             </p>
             {projects.length === 0 ? (
               <div className="empty">
@@ -174,7 +236,20 @@ export default function App() {
               </div>
             ) : (
               projects.map((project) => (
-                <div key={project.id} className="project-row" onClick={() => open(project.id)}>
+                <div
+                  key={project.id}
+                  className="project-row"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${project.title} 열기`}
+                  onClick={() => open(project.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      open(project.id);
+                    }
+                  }}
+                >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <strong>{project.title}</strong>
                     {project.has_dub ? (
@@ -199,6 +274,7 @@ export default function App() {
                       event.stopPropagation();
                       remove(project.id);
                     }}
+                    onKeyDown={(event) => event.stopPropagation()}
                   >
                     삭제
                   </button>
@@ -216,6 +292,7 @@ export default function App() {
             voices={voices}
             onCancel={() => setView("list")}
             onCreated={(next) => {
+              openProjectId.current = next.project.id;
               setPayload(next);
               setJob(null);
               setView("editor");
@@ -226,16 +303,15 @@ export default function App() {
 
         {view === "editor" && payload && (
           <Editor
+            // 프로젝트가 바뀌면 편집 중이던 초안(다시 붙여넣기 등)이 다른 프로젝트로 넘어가지 않게 새로 그린다
+            key={payload.project.id}
             payload={payload}
             engines={engines}
             voices={voices}
-            job={job}
-            onPayload={setPayload}
+            job={job && job.project_id === payload.project.id ? job : null}
+            onPayload={showPayload}
             onJob={trackJob}
-            onBack={() => {
-              setView("list");
-              loadProjects();
-            }}
+            onBack={backToList}
             onError={setError}
           />
         )}
@@ -247,8 +323,7 @@ export default function App() {
           voices={voices}
           dictionary={dictionary}
           onClose={() => setDrawer(false)}
-          onRefresh={loadShared}
-          onError={setError}
+          onRefresh={refreshShared}
         />
       )}
 
@@ -258,4 +333,27 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+/** 그리다 오류가 나면 빈 화면 대신 안내를 보여 준다. */
+class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="container">
+        <div className="error-banner" style={{ marginTop: 40 }}>
+          <span style={{ flex: 1 }}>화면을 그리다 문제가 생겼습니다. 새로고침하면 대부분 해결됩니다.</span>
+          <button className="btn small" onClick={() => window.location.reload()}>
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
 }

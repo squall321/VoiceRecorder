@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { formatSeconds } from "../format";
+import { formatRange } from "../format";
 import type { Engine, ParseResponse, ProjectPayload, Voice } from "../types";
 import { pickDefaultEngine } from "./EngineStatus";
 
@@ -47,6 +47,8 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
   }, [raw]);
 
   const languages = engines.find((e) => e.id === engine)?.languages ?? { ko: "Korean" };
+  // MeloTTS 처럼 화자 복제가 없는 엔진이면 화자 선택이 아무 일도 하지 않는다 — 잠가 둔다
+  const canClone = engines.find((e) => e.id === engine)?.supports_voice_cloning ?? false;
 
   async function create() {
     setBusy(true);
@@ -57,7 +59,7 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
         raw_script: raw,
         engine,
         language: "ko" in languages ? "ko" : Object.keys(languages)[0],
-        voice_id: voiceId || null,
+        voice_id: canClone ? voiceId || null : null,
         gap_ms: gapMs,
         speed,
         read_numbers: readNumbers,
@@ -80,7 +82,7 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
           <p className="hint">
             <code>01 오프닝 (0:00–0:08) "본문"</code>, <code>0:05 본문</code>,{" "}
             <code>- [6.1초] 본문</code>, <code>## 01 오프닝 (0:00–0:18)</code> 아래 문장들, 마크다운
-            표·엑셀에서 복사한 표(시작·끝·나레이션·읽는 법 열)를 그대로 인식합니다. 번호·타임코드가
+            표·엑셀에서 복사한 표(시작·끝·나레이션·읽는 법 열), SRT·VTT 자막 파일을 그대로 인식합니다. 번호·타임코드가
             없으면 빈 줄 기준으로 씬을 나눕니다.
           </p>
           <label className="field" style={{ marginBottom: 12 }}>
@@ -114,7 +116,7 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
               2. 씬 미리보기{" "}
               {parsed && (
                 <span className={`badge ${parsed.structured ? "info" : "pending"}`}>
-                  {parsed.structured ? "번호·타임코드 인식됨" : "문단 분할"}
+                  {parsed.structured ? "번호·타임코드 인식됨" : "문단 분할 — 타임코드 없음"}
                 </span>
               )}
             </h2>
@@ -123,6 +125,8 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
               <>
                 <p className="hint">
                   씬 {parsed.scenes.length}개 · 총 {parsed.scenes.reduce((n, s) => n + s.char_count, 0)}자
+                  {!parsed.structured &&
+                    " · 타임코드가 없어 영상에 입히면 씬을 무음 간격대로 처음부터 이어 붙입니다"}
                 </p>
                 <ol className="list-plain">
                   {parsed.scenes.map((scene) => (
@@ -143,9 +147,9 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
                       </span>
                       {scene.target_start_sec !== null && (
                         <span className="scene-meta mono">
-                          {formatSeconds(scene.target_start_sec)}
+                          {formatRange(scene.target_start_sec, scene.target_end_sec)}
                           {scene.target_duration_sec !== null &&
-                            ` · ${formatSeconds(scene.target_duration_sec)}`}
+                            ` (${Math.round(scene.target_duration_sec * 10) / 10}초)`}
                         </span>
                       )}
                     </li>
@@ -171,7 +175,11 @@ export function ScriptComposer({ engines, defaultEngine, defaultSpeed, voices, o
               </label>
               <label className="field">
                 화자
-                <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)}>
+                <select
+                  value={canClone ? voiceId : ""}
+                  disabled={!canClone}
+                  onChange={(e) => setVoiceId(e.target.value)}
+                >
                   <option value="">기본 목소리</option>
                   {voices.map((voice) => (
                     <option key={voice.id} value={voice.id}>

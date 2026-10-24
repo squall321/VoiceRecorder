@@ -88,6 +88,8 @@ export interface Job {
   current: string | null;
   error: string | null;
   result: Record<string, unknown> | null;
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface FitReport {
