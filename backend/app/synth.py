@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
 import time
 import wave
@@ -407,10 +406,11 @@ def dub_fingerprint(views: list[dict], meta: dict | None) -> str:
 def dub_info(project: dict, views: list[dict]) -> dict | None:
     """마지막으로 만든 음성 입힌 영상의 리포트 + 지금 상태와 어긋났는지(stale)."""
     folder = config.dub_dir(project["id"])
-    report_path = folder / "result.json"
-    if not report_path.exists() or not (folder / "dubbed.mp4").exists():
+    if not (folder / "dubbed.mp4").exists():
         return None
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report = video.read_json(folder / "result.json")  # 깨졌으면 결과 없음으로 본다
+    if report is None:
+        return None
     report["stale"] = report.get("fingerprint") != dub_fingerprint(views, video.read_meta(project["id"]))
     return report
 
@@ -433,20 +433,24 @@ def dub_project(project: dict, *, original_volume: float = 0.0, progress=None) -
         raise ValueError(f"음성이 준비되지 않은 씬이 {len(not_ready)}개 있습니다")
 
     timeline, overruns = place_on_timecode(views)
+    if not timeline.entries:
+        raise ValueError("배치할 음성이 없습니다 — 씬 음성 길이가 모두 0초입니다. 음성을 다시 생성해 보세요")
     total = max(timeline.total_sec, meta["duration_sec"])
 
     folder = config.dub_dir(project["id"])
     folder.mkdir(parents=True, exist_ok=True)
     placed = folder / "_placed.wav"
-    if progress:
-        progress(1, "문장 배치")
-    _render_placed_wav(project["id"], timeline, placed, total)
-    audio.concat_to_mp3([placed], folder / "narration.mp3", bitrate=config.MP3_BITRATE)
-    (folder / "narration.srt").write_text(render_srt(timeline), encoding="utf-8")
-
-    if progress:
-        progress(2, "영상에 입히는 중")
+    # 결과 세트(mp4·mp3·srt)는 먹싱까지 성공했을 때만 한꺼번에 바꾼다 — 실패하면 이전 세트가 그대로 남는다
+    new_mp3, new_srt = folder / "_narration.mp3", folder / "_narration.srt"
     try:
+        if progress:
+            progress(1, "문장 배치")
+        _render_placed_wav(project["id"], timeline, placed, total)
+        audio.concat_to_mp3([placed], new_mp3, bitrate=config.MP3_BITRATE)
+        new_srt.write_text(render_srt(timeline), encoding="utf-8")
+
+        if progress:
+            progress(2, "영상에 입히는 중")
         muxed = video.mux(
             source,
             placed,
@@ -454,8 +458,12 @@ def dub_project(project: dict, *, original_volume: float = 0.0, progress=None) -
             original_volume=original_volume,
             has_audio=bool(meta.get("has_audio")),
         )
+        new_mp3.replace(folder / "narration.mp3")
+        new_srt.replace(folder / "narration.srt")
     finally:
-        placed.unlink(missing_ok=True)
+        # 배치 wav 는 영상 길이만큼이라 수백 MB 가 될 수 있다 — 실패해도 남기지 않는다
+        for leftover in (placed, new_mp3, new_srt):
+            leftover.unlink(missing_ok=True)
         shutil.rmtree(folder / "_conv", ignore_errors=True)
 
     report = {
@@ -472,7 +480,7 @@ def dub_project(project: dict, *, original_volume: float = 0.0, progress=None) -
         "created_at": time.time(),
         "fingerprint": dub_fingerprint(views, meta),
     }
-    (folder / "result.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    video.write_json(folder / "result.json", report)
     return report
 
 
@@ -494,13 +502,22 @@ def _render_placed_wav(project_id: str, timeline, out: Path, total_sec: float) -
                 frames = fh.readframes(fh.getnframes())
             target = int(round(entry.speech_start_sec * rate))
             if target > cursor:
-                dst.writeframes(b"\x00" * ((target - cursor) * frame_bytes))
+                _write_silence(dst, target - cursor, frame_bytes)
                 cursor = target
             dst.writeframes(frames)
             cursor += len(frames) // frame_bytes
         end = int(round(total_sec * rate))
         if end > cursor:
-            dst.writeframes(b"\x00" * ((end - cursor) * frame_bytes))
+            _write_silence(dst, end - cursor, frame_bytes)
+
+
+def _write_silence(dst, frames: int, frame_bytes: int, chunk_frames: int = 48_000) -> None:
+    """무음을 1초 남짓씩 나눠 쓴다 — 1시간 영상이면 한 번에 수백 MB 버퍼를 만들게 된다."""
+    block = b"\x00" * (min(frames, chunk_frames) * frame_bytes)
+    while frames > 0:
+        n = min(frames, chunk_frames)
+        dst.writeframes(block[: n * frame_bytes])
+        frames -= n
 
 
 def _wav_format(path: Path, convert_dir: Path) -> tuple[int, int]:

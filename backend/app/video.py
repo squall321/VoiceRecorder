@@ -28,7 +28,7 @@ def probe(path: Path) -> dict:
             "-v",
             "error",
             "-show_entries",
-            "format=duration:stream=codec_type,codec_name,width,height:stream_disposition=attached_pic",
+            "format=duration:stream=codec_type,codec_name,width,height,duration:stream_disposition=attached_pic",
             "-of",
             "json",
             str(path),
@@ -48,11 +48,12 @@ def probe(path: Path) -> dict:
     ]
     if not videos:
         raise VideoError("영상 스트림이 없습니다 (영상 파일을 올려 주세요)")
-    try:
-        duration = float((data.get("format") or {}).get("duration") or 0.0)
-    except ValueError:
-        duration = 0.0
-    if duration <= 0:
+    # 컨테이너 길이 → 영상 스트림 길이 → 마지막 패킷 시각 순서로 본다. 브라우저 녹화(MediaRecorder)
+    # webm 은 컨테이너에 길이가 없어 첫 단계만 보면 멀쩡한 영상을 "길이를 알 수 없다"며 거부했다.
+    duration = _as_seconds((data.get("format") or {}).get("duration")) or _as_seconds(videos[0].get("duration"))
+    if not duration:
+        duration = _last_packet_time(path)
+    if not duration:
         raise VideoError("영상 길이를 알 수 없습니다")
     return {
         "duration_sec": round(duration, 3),
@@ -63,6 +64,25 @@ def probe(path: Path) -> dict:
     }
 
 
+def _as_seconds(value) -> float:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return seconds if seconds > 0 else 0.0
+
+
+def _last_packet_time(path: Path) -> float:
+    """영상 패킷의 마지막 표시 시각 — 디코딩 없이 패킷 머리만 읽는다."""
+    proc = subprocess.run(
+        [FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-of", "csv=p=0", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    times = [_as_seconds(line.strip().rstrip(",")) for line in proc.stdout.splitlines() if line.strip()]
+    return max(times, default=0.0)
+
+
 # ── 프로젝트에 붙은 영상 ────────────────────────────────────────────────────
 
 
@@ -70,11 +90,26 @@ def _meta_path(project_id: str) -> Path:
     return config.video_dir(project_id) / "meta.json"
 
 
-def read_meta(project_id: str) -> dict | None:
-    path = _meta_path(project_id)
-    if not path.exists():
+def read_json(path: Path) -> dict | None:
+    """깨진(0바이트·반쯤 쓴) JSON 은 '없음'으로 본다 — 파일 하나 때문에 목록 전체가 500 나지 않게."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
-    meta = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else None
+
+
+def write_json(path: Path, data: dict) -> None:
+    """임시 파일에 쓰고 rename — 쓰는 도중 죽어도 이전 내용이 남는다."""
+    part = path.with_name(path.name + ".part")
+    part.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    part.replace(path)
+
+
+def read_meta(project_id: str) -> dict | None:
+    meta = read_json(_meta_path(project_id))
+    if not meta or not meta.get("stored_name"):
+        return None
     if not (config.video_dir(project_id) / meta["stored_name"]).exists():
         return None
     return meta
@@ -100,7 +135,7 @@ def store_upload(project_id: str, uploaded: Path, original_name: str) -> dict:
         "size_bytes": (folder / stored_name).stat().st_size,
         "uploaded_at": time.time(),
     }
-    _meta_path(project_id).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    write_json(_meta_path(project_id), meta)
     return meta
 
 
@@ -145,7 +180,19 @@ def mux(
 
     attempts = [
         ["-c:v", "copy"],
-        ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"],
+        # yuv420p 는 가로·세로가 짝수여야 한다 — 홀수 해상도(161x121 등)는 한 픽셀 깎는다
+        [
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+        ],
     ]
     error = ""
     for video_codec in attempts:

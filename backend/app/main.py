@@ -51,6 +51,9 @@ log = logging.getLogger("voicerecorder")
 async def lifespan(_: FastAPI):
     config.ensure_dirs()
     store.init_db()
+    # 기동 시점엔 진행 중인 업로드가 없다 — 끊긴 업로드가 남긴 영상 조각을 치운다(수 GB 일 수 있다)
+    for orphan in config.UPLOADS_DIR.glob("video-*"):
+        orphan.unlink(missing_ok=True)
     if not audio.ffmpeg_available():
         log.error("ffmpeg/ffprobe 가 PATH 에 없습니다 — 속도 조절·mp3 내보내기·영상 입히기가 실패합니다")
     runner.start()
@@ -397,6 +400,11 @@ async def upload_video(project_id: str, request: Request, filename: str = "") ->
     _project_or_404(project_id)
     if _dub_running(project_id):
         raise HTTPException(status_code=409, detail="음성 입히는 작업이 끝난 뒤에 영상을 바꾸세요")
+    limit_gb = config.MAX_VIDEO_UPLOAD_BYTES / 1024**3
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > config.MAX_VIDEO_UPLOAD_BYTES:
+        # 4GB 를 다 받고서야 거절하지 않게, 선언된 크기로 먼저 본다
+        raise HTTPException(status_code=413, detail=f"영상이 너무 큽니다 ({limit_gb:.0f}GB 이하)")
 
     # 저장 확장자는 영상 형식만 — 'x.html' 로 올린 파일이 text/html 로 서빙되면 포털 출처에서 스크립트가 돈다
     suffix = Path(filename).suffix.lower()
@@ -411,11 +419,13 @@ async def upload_video(project_id: str, request: Request, filename: str = "") ->
             async for chunk in request.stream():
                 size += len(chunk)
                 if size > config.MAX_VIDEO_UPLOAD_BYTES:
-                    limit_gb = config.MAX_VIDEO_UPLOAD_BYTES / 1024**3
                     raise HTTPException(status_code=413, detail=f"영상이 너무 큽니다 ({limit_gb:.0f}GB 이하)")
                 fh.write(chunk)
         if size == 0:
             raise HTTPException(status_code=400, detail="빈 파일입니다")
+        if _dub_running(project_id):
+            # 몇 분 걸리는 업로드 사이에 다른 탭·API 가 더빙을 시작했을 수 있다 — 들이기 직전에 다시 본다
+            raise HTTPException(status_code=409, detail="음성 입히는 작업이 끝난 뒤에 영상을 바꾸세요")
         try:
             # ffprobe·파일 이동은 블로킹이라 이벤트 루프 밖에서 돌린다
             await run_in_threadpool(video.store_upload, project_id, upload, filename or f"video{suffix}")

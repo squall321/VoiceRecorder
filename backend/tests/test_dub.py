@@ -224,3 +224,76 @@ def test_upload_suffix_cannot_turn_video_into_html(client, media):  # noqa: F811
     served = client.get(f"/api/projects/{pid}/video")
     assert served.headers["content-type"] == "video/mp4"
     assert served.headers["x-content-type-options"] == "nosniff"
+
+
+# ── 견고성 (리뷰에서 재현된 것들) ───────────────────────────────────────────
+
+
+def test_webm_without_container_duration_is_accepted(client, tmp_path):  # noqa: F811
+    # 파이프로 쓴 webm(브라우저 녹화와 같다)은 컨테이너에 길이가 없다 — 스트림·패킷 시각으로 잰다
+    out = tmp_path / "piped.webm"
+    with out.open("wb") as fh:
+        subprocess.run(
+            [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=3:size=160x120:rate=10",
+             "-c:v", "libvpx", "-b:v", "100k", "-f", "webm", "pipe:1"],
+            stdout=fh, check=True,
+        )
+    pid = _project(client)
+    body = _upload(client, pid, out)
+    assert body["video"]["duration_sec"] == pytest.approx(3.0, abs=0.3)
+
+
+def test_odd_sized_video_is_reencoded_with_even_dimensions(client, tmp_path):  # noqa: F811
+    src = tmp_path / "odd.webm"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=duration=6:size=161x121:rate=10",
+         "-c:v", "libvpx", "-b:v", "100k", str(src)],
+        check=True,
+    )
+    pid = _project(client)
+    _upload(client, pid, src)
+    result = _dub(client, pid)["result"]
+    assert result["video_copied"] is False
+
+
+def test_broken_meta_or_result_json_does_not_break_listing(client, media):  # noqa: F811
+    from app import config
+
+    pid = _project(client)
+    _upload(client, pid, media["mp4"])
+    _dub(client, pid)
+    (config.video_dir(pid) / "meta.json").write_text("", encoding="utf-8")
+    (config.dub_dir(pid) / "result.json").write_text("{", encoding="utf-8")
+
+    assert client.get("/api/projects").status_code == 200
+    body = client.get(f"/api/projects/{pid}").json()
+    assert body["video"] is None and body["dub"] is None
+
+
+def test_declared_oversize_upload_is_rejected_before_streaming(client, monkeypatch, media):  # noqa: F811
+    from app import config
+
+    monkeypatch.setattr(config, "MAX_VIDEO_UPLOAD_BYTES", 1000)
+    pid = _project(client)
+    response = client.put(f"/api/projects/{pid}/video?filename=big.mp4", content=media["mp4"].read_bytes())
+    assert response.status_code == 413
+    assert list(config.UPLOADS_DIR.glob("video-*")) == []
+
+
+def test_failed_dub_leaves_no_temp_files_and_keeps_previous_result(client, media):  # noqa: F811
+    from app import config
+
+    pid = _project(client)
+    _upload(client, pid, media["mp4"])
+    _dub(client, pid)
+    folder = config.dub_dir(pid)
+    before = (folder / "narration.srt").read_text(encoding="utf-8")
+
+    # 씬 wav 하나를 망가뜨리고 다시 만든다 → 실패해도 임시 파일이 없고 이전 결과 세트가 그대로다
+    scene = client.get(f"/api/projects/{pid}").json()["scenes"][0]
+    config.scene_audio_path(pid, scene["id"]).write_bytes(b"not a wav")
+    response = client.post(f"/api/projects/{pid}/dub", json={})
+    job = _await_job(client, response.json()["job_id"])
+    assert job["status"] == "error"
+    assert sorted(p.name for p in folder.iterdir()) == ["dubbed.mp4", "narration.mp3", "narration.srt", "result.json"]
+    assert (folder / "narration.srt").read_text(encoding="utf-8") == before
