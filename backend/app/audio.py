@@ -21,6 +21,12 @@ class AudioError(RuntimeError):
     pass
 
 
+def ffmpeg_available() -> bool:
+    """ffmpeg·ffprobe 가 PATH 에 있는지. 없으면 속도 조절·병합·영상 입히기가 전부 실패한다
+    (2026-10-24 까지 포털 SIF 에 실제로 없었다 — 화면에 바로 알리려고 확인한다)."""
+    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
 def _run(args: list[str]) -> None:
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:

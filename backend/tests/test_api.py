@@ -116,6 +116,11 @@ def test_melo_is_the_default_engine(client):
     assert _create(client)["project"]["engine"] == "melo"
 
 
+def test_engines_endpoint_reports_ffmpeg(client):
+    # 포털 SIF 에서 ffmpeg 가 빠졌던 적이 있다 — 화면이 바로 경고할 수 있게 알려 준다
+    assert client.get("/api/engines").json()["ffmpeg"] is True
+
+
 def test_default_speed_is_1_2(client):
     # 사용자의 표준 속도 — 속도를 안 넘긴 새 프로젝트가 1.2배, 화면 첫 값도 서버가 알려 준다
     assert client.get("/api/engines").json()["default_speed"] == 1.2

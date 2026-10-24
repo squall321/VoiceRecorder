@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 
 from ..audio import probe_duration
+from . import weights
 from .base import EngineStatus, SynthesisRequest, TTSEngine
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -33,6 +34,18 @@ _LANGUAGES = {
 }
 
 _LANG_TO_MELO = {"ko": "KR", "en": "EN", "ja": "JP", "zh": "ZH", "es": "ES", "fr": "FR"}
+
+# 한국어 합성에 필요한 캐시 — melo 는 import 할 때 모든 언어 모듈이 자기 토크나이저를 불러온다
+# (scripts/fetch-models.sh 의 melo_aux 와 같은 목록).
+MELO_REPOS = (
+    "myshell-ai/MeloTTS-Korean",
+    "kykim/bert-kor-base",
+    "tohoku-nlp/bert-base-japanese-v3",
+    "bert-base-uncased",
+    "bert-base-multilingual-uncased",
+    "dbmdz/bert-base-french-europeana-cased",
+    "dccuchile/bert-base-spanish-wwm-uncased",
+)
 
 
 def _melo_installed() -> bool:
@@ -67,6 +80,9 @@ class MeloEngine(TTSEngine):
             return EngineStatus(
                 False, "venv 는 있으나 melo 패키지가 없음 — scripts/setup-melo.sh 를 다시 실행하세요"
             )
+        lacking = weights.missing(MELO_REPOS)
+        if lacking:
+            return EngineStatus(False, weights.missing_detail(lacking))
         return EngineStatus(True, "준비됨 (CPU 사이드카)", "cpu")
 
     def languages(self) -> dict[str, str]:

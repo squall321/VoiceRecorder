@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 
 from ..audio import probe_duration
+from . import weights
 from .base import EngineStatus, SynthesisRequest, TTSEngine
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -59,6 +60,10 @@ class CosyEngine(TTSEngine):
             return EngineStatus(
                 False, "venv 에 cosyvoice 의존성이 없음 — scripts/setup-cosy.sh 를 다시 실행하세요"
             )
+        # 가중치(HF) + wetext FST(modelscope, 텍스트 정규화)
+        lacking = weights.missing(["FunAudioLLM/Fun-CosyVoice3-0.5B-2512"], modelscope=["pengzhendong/wetext"])
+        if lacking:
+            return EngineStatus(False, weights.missing_detail(lacking))
         return EngineStatus(True, "준비됨 (CPU 사이드카)", "cpu")
 
     def languages(self) -> dict[str, str]:

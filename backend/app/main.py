@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import config, store, synth, video
+from . import audio, config, store, synth, video
 from .jobs import runner
 from .models import (
     ApplySpeedRequest,
@@ -51,6 +51,8 @@ log = logging.getLogger("voicerecorder")
 async def lifespan(_: FastAPI):
     config.ensure_dirs()
     store.init_db()
+    if not audio.ffmpeg_available():
+        log.error("ffmpeg/ffprobe 가 PATH 에 없습니다 — 속도 조절·mp3 내보내기·영상 입히기가 실패합니다")
     runner.start()
     yield
     runner.stop()
@@ -116,11 +118,13 @@ def health() -> dict:
 
 @app.get("/api/engines")
 def engines() -> dict:
-    # default_speed 는 새 내레이션 화면의 첫 속도 — 엔진 기본값과 같이 서버가 정한다
+    # default_speed 는 새 내레이션 화면의 첫 속도 — 엔진 기본값과 같이 서버가 정한다.
+    # ffmpeg 가 없으면 합성 후처리가 전부 실패하므로 화면이 바로 경고하게 같이 알린다.
     return {
         "engines": describe_engines(),
         "default": config.DEFAULT_ENGINE,
         "default_speed": config.DEFAULT_SPEED,
+        "ffmpeg": audio.ffmpeg_available(),
     }
 
 

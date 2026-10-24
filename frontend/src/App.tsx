@@ -19,6 +19,8 @@ export default function App() {
   // 서버가 정한 기본 엔진(현재 MeloTTS)·속도(1.2배) — 새 내레이션의 첫 선택과 상단 배지에 쓴다
   const [defaultEngine, setDefaultEngine] = useState("");
   const [defaultSpeed, setDefaultSpeed] = useState(1.2);
+  // 서버에 ffmpeg 가 없으면 합성 후처리가 전부 실패한다 — 처음부터 경고를 띄운다
+  const [ffmpegOk, setFfmpegOk] = useState(true);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [dictionary, setDictionary] = useState<DictionaryEntry[]>([]);
   const [job, setJob] = useState<Job | null>(null);
@@ -36,6 +38,7 @@ export default function App() {
       setEngines(engineList.engines);
       setDefaultEngine(engineList.default);
       setDefaultSpeed(engineList.default_speed);
+      setFfmpegOk(engineList.ffmpeg);
       setVoices(voiceList.voices);
       setDictionary(dict.entries);
     } catch (err) {
@@ -136,6 +139,12 @@ export default function App() {
       </header>
 
       <main className="container">
+        {!ffmpegOk && (
+          <div className="error-banner">
+            ⚠ 서버에 ffmpeg 가 없어 속도 조절 · mp3 내보내기 · 영상에 음성 입히기가 동작하지 않습니다.
+            관리자에게 알려 주세요.
+          </div>
+        )}
         {error && (
           <div className="error-banner">
             <span style={{ flex: 1 }}>{error}</span>

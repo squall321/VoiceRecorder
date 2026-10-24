@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .. import config
 from ..script_parser import chunk_text
+from . import weights
 from .base import EngineStatus, SynthesisRequest, TTSEngine
 
 # HF 캐시를 DATA_DIR 밑으로 고정한다. import 전에 잡아야 huggingface_hub 가 읽는다.
@@ -50,6 +51,9 @@ class ChatterboxEngine(TTSEngine):
             return EngineStatus(False, "chatterbox-tts 가 설치되지 않았습니다 (scripts/setup-backend.sh)")
         if importlib.util.find_spec("torch") is None:
             return EngineStatus(False, "torch 가 설치되지 않았습니다")
+        lacking = weights.missing(["ResembleAI/chatterbox"])
+        if lacking:
+            return EngineStatus(False, weights.missing_detail(lacking))
 
         device = self._device or self._resolve_device()
         detail = f"준비됨 ({device})"
