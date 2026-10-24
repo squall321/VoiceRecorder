@@ -54,7 +54,21 @@ def test_decimal_is_read_digit_by_digit():
 def test_native_counter_uses_native_numerals():
     assert normalize_numbers("6명이 모였다") == "여섯 명이 모였다"
     assert normalize_numbers("3개") == "세 개"
-    assert normalize_numbers("20개") == "스무 개"
+    assert normalize_numbers("20살") == "스무 살"
+
+
+def test_count_nouns_are_native_only_under_ten():
+    """개·대·쌍·종·건은 1~9 만 고유어 — 사용자 대본의 읽는 법 규칙 (14개 → 십사 개)."""
+    assert normalize_numbers("3건") == "세 건"
+    assert normalize_numbers("9종") == "아홉 종"
+    assert normalize_numbers("14개") == "십사 개"
+    assert normalize_numbers("20개") == "이십 개"
+    assert normalize_numbers("47개 가운데 43개가") == "사십칠 개 가운데 사십삼 개가"
+    assert normalize_numbers("13건") == "십삼 건"
+
+
+def test_months_are_sino():
+    assert normalize_numbers("3개월") == "삼 개월"
 
 
 def test_non_counter_uses_sino_numerals():
@@ -78,7 +92,7 @@ def test_hour_is_native_but_minute_is_sino():
 def test_particles_stay_attached():
     """조사는 앞말에 붙는다 — '삼 에서'가 아니라 '삼에서'."""
     assert normalize_numbers("3에서 5개") == "삼에서 다섯 개"
-    assert normalize_numbers("20개를") == "스무 개를"
+    assert normalize_numbers("20개를") == "이십 개를"
 
 
 def test_spaced_dash_becomes_comma():
@@ -123,3 +137,79 @@ def test_empty_input():
 def test_whitespace_and_ellipsis_are_tidied():
     assert normalize("가   나") == "가 나"
     assert normalize("그리고....") == "그리고…"
+
+
+# ── 영문 약어 · 단위 · 가운뎃점 · 읽는 법 ───────────────────────────────────
+
+
+def test_uppercase_acronyms_are_spelled():
+    """MeloTTS 는 사전에 없는 영문을 소리 없이 흘린다 — 글자 이름으로 바꿔 준다."""
+    assert normalize("PLM 기준정보와 CAE 결과") == "피엘엠 기준정보와 씨에이이 결과"
+    assert normalize("AI가 답합니다") == "에이아이가 답합니다"
+    assert normalize("B책임") == "비책임"
+
+
+def test_acronym_digits_are_read_as_numbers():
+    assert normalize("모델 S26 출시") == "모델 에스이십육 출시"
+    assert normalize("탭 S11") == "탭 에스십일"
+
+
+def test_mixed_case_and_digit_first_words_are_left_alone():
+    # 규칙으로 읽을 수 없는 것들 — 영문 글자가 남아 화면에 '영문 남음' 으로 드러난다
+    from app.textnorm import latin_words
+
+    out = normalize("Screw 체결과 3D 모델, A50s")
+    assert {"Screw", "D", "A"} <= set(latin_words(out))
+
+
+def test_units_after_numbers_are_read():
+    assert normalize("0.5 mm 이상") == "영 점 오 밀리미터 이상"
+    assert normalize("46dB 감소") == "사십육 데시벨 감소"
+    assert normalize("2.4GHz 대역") == "이 점 사 기가헤르츠 대역"
+    # 숫자가 앞에 없으면 단위가 아니다
+    assert "mm" in normalize("mm 단위", read_numbers=True)
+
+
+def test_plus_minus_and_degree():
+    assert normalize("±1℃") == "플러스마이너스 일 도"
+    assert normalize("45°") == "사십오 도"
+
+
+def test_middle_dot_becomes_pause():
+    assert normalize("기구·해석·신뢰성") == "기구, 해석, 신뢰성"
+    assert normalize("구조 · 신뢰도") == "구조, 신뢰도"
+
+
+def test_korean_rules_only_for_korean():
+    assert normalize("PLM 2", language="en") == "PLM 이"  # 숫자 규칙은 기존대로, 약어는 그대로
+
+
+def test_reading_pairs_apply_first():
+    reading = "AI → 에이아이 · 6만 → 육만"
+    assert normalize("AI가 6만 건을", reading=reading) == "에이아이가 육만 건을"
+    # 씬 읽는 법이 전역 사전보다 앞선다
+    out = normalize("HWAX 심의", reading="HWAX = 하드웨어 에이엑스", dictionary=[("HWAX", "에이치왁스")])
+    assert out == "하드웨어 에이엑스 심의"
+
+
+def test_parse_reading_pairs_formats():
+    from app.textnorm import parse_reading_pairs
+
+    assert parse_reading_pairs("AI → 에이아이 · 6만 → 육만") == [("AI", "에이아이"), ("6만", "육만")]
+    assert parse_reading_pairs("HWAX = 하드웨어 에이엑스, UW = 유더블유") == [
+        ("HWAX", "하드웨어 에이엑스"),
+        ("UW", "유더블유"),
+    ]
+    assert parse_reading_pairs("「응력」 -> 응녁\n전·배면 => 전면과 배면") == [
+        ("응력", "응녁"),
+        ("전·배면", "전면과 배면"),
+    ]
+    assert parse_reading_pairs("발음 주의 메모뿐") == []
+    assert parse_reading_pairs(None) == []
+
+
+def test_latin_words_reports_leftovers():
+    from app.textnorm import latin_words
+
+    assert latin_words("스크루 Screw 와 Ultra, 다시 Screw") == ["Screw", "Ultra"]
+    assert latin_words("모두 한글") == []

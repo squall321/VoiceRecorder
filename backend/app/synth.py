@@ -37,6 +37,7 @@ def normalized_text(project: dict, scene: dict) -> str:
         scene["text"],
         dictionary=store.dictionary_pairs(),
         read_numbers=bool(project["read_numbers"]),
+        language=project["language"],
     )
 
 
@@ -140,6 +141,7 @@ def synthesize_oneshot(tts_id: str, params: dict) -> dict:
         params["text"],
         dictionary=store.dictionary_pairs(),
         read_numbers=bool(params.get("read_numbers", True)),
+        language=params.get("language") or config.DEFAULT_LANGUAGE,
     )
     if not text.strip():
         raise ValueError("텍스트가 비어 있습니다")
