@@ -5,6 +5,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .script_formats import (
+    extract_reading_lines,
+    format_pairs,
+    looks_like_cue_script,
+    parse_cue_lines,
+    parse_tables,
+)
+from .textnorm import parse_reading_pairs
+
 # 사용자 스크립트는 en dash(–, U+2013) 를 쓴다. 하이픈만 처리하면 전부 파싱에 실패하므로
 # 하이픈·en dash·em dash·물결 을 모두 구분자로 받는다.
 _DASH = r"[-–—−~]"
@@ -12,8 +21,9 @@ _DASH = r"[-–—−~]"
 # 0:08 / 01:02:03 / 1:06.5 / 12:34,500 모두 허용
 _TC = r"\d{1,3}:\d{1,2}(?::\d{1,2})?(?:[.,]\d{1,3})?"
 
+# '(0:00–0:08 / 8초)' 처럼 괄호 안 끝에 길이 메모가 붙어도 받는다
 _TIMECODE_RE = re.compile(
-    rf"[(\[]\s*(?P<start>{_TC})\s*{_DASH}\s*(?P<end>{_TC})\s*[)\]]"
+    rf"[(\[]\s*(?P<start>{_TC})\s*{_DASH}\s*(?P<end>{_TC})\s*(?:[/·,|][^)\]]*)?[)\]]"
 )
 
 # "01 " / "1) " / "[02] " / "씬 3." / "Scene 4 -" 등 선두 번호
@@ -30,6 +40,9 @@ _DURATION_PAREN_RE = re.compile(
 
 _QUOTE_CHARS = "\"'“”‘’「」『』«»"
 _QUOTE_OPEN_RE = re.compile(f"[{re.escape(_QUOTE_CHARS)}]")
+
+# 'Hook [0:00–0:07] — 본문' 처럼 타임코드와 본문 사이에 낀 구분 기호
+_LEADING_SEP_RE = re.compile(r"^\s*(?:[—–:|·]|-(?=\s))\s*")
 
 _BLOCK_SPLIT_RE = re.compile(r"\n\s*\n+")
 
@@ -49,6 +62,8 @@ class ParsedScene:
     target_end_sec: float | None = None
     # '(8초)' 처럼 길이만 적힌 경우. 시작 시각은 앞 씬들을 누적해 parse_script 가 채운다.
     duration_hint_sec: float | None = None
+    # 읽는 법 — 'AI → 에이아이 · 6만 → 육만'. 자막(text)은 그대로 두고 합성 소리만 바꾼다.
+    reading: str | None = None
 
     @property
     def target_duration_sec(self) -> float | None:
@@ -159,7 +174,7 @@ def _parse_block(block: str, index: int) -> ParsedScene | None:
             body, header = header, ""
 
     title = header.strip(" .:–-") or None
-    text = _strip_quotes(body)
+    text = _strip_quotes(_LEADING_SEP_RE.sub("", body))
     if not text:
         # 헤더만 있고 본문이 비었으면 제목을 본문으로 승격 (버려지는 텍스트가 없게)
         if not title:
@@ -180,11 +195,56 @@ def _parse_block(block: str, index: int) -> ParsedScene | None:
 def parse_script(raw: str) -> ParseResult:
     """스크립트 원문 → 씬 리스트.
 
+    0순위: 시각이 든 표(마크다운·탭 구분), 그다음 줄머리 시각·마크다운 제목 구간 형식
+           (script_formats). 어느 쪽이든 `읽는 법:` 줄은 먼저 떼어 씬 읽는 법으로 붙인다.
     1순위: 빈 줄로 구분된 블록. 각 블록에서 `01 제목 (0:00–0:08) "본문"` 을 벗겨낸다.
     폴백:  빈 줄이 하나도 없으면 번호로 시작하는 줄마다 새 씬으로 끊고,
            그것도 없으면 줄 단위로 끊는다.
     """
     raw = (raw or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not raw:
+        return ParseResult()
+
+    raw, reading_pairs = extract_reading_lines(raw)
+    result = _parse_cue_formats(raw) or _parse_blocks(raw.strip())
+    _attach_reading(result.scenes, reading_pairs)
+    return result
+
+
+def _parse_cue_formats(raw: str) -> ParseResult | None:
+    cues = parse_tables(raw)
+    if cues is None and looks_like_cue_script(raw):
+        cues = parse_cue_lines(raw)
+    if not cues:
+        return None
+    scenes: list[ParsedScene] = []
+    for cue in cues:
+        text = _strip_quotes(cue["text"])
+        if not text:
+            continue
+        scenes.append(
+            ParsedScene(
+                index=len(scenes),
+                text=text,
+                number=cue["number"],
+                title=cue["title"],
+                target_start_sec=cue["start"],
+                target_end_sec=cue["end"],
+                reading=cue["reading"],
+            )
+        )
+    return ParseResult(scenes=scenes, structured=True) if scenes else None
+
+
+def _attach_reading(scenes: list[ParsedScene], script_pairs: list[tuple[str, str]]) -> None:
+    """대본 머리의 읽는 법 중 그 씬 본문에 실제로 나오는 것만 씬 읽는 법에 더한다."""
+    for scene in scenes:
+        pairs = parse_reading_pairs(scene.reading)
+        pairs += [(s, t) for s, t in script_pairs if s in scene.text]
+        scene.reading = format_pairs(pairs)
+
+
+def _parse_blocks(raw: str) -> ParseResult:
     if not raw:
         return ParseResult()
 
@@ -199,8 +259,24 @@ def parse_script(raw: str) -> ParseResult:
             scenes.append(scene)
 
     _fill_cumulative_targets(scenes)
+    scenes = _drop_untimed_preamble(scenes)
     structured = any(s.number is not None or s.target_start_sec is not None for s in scenes)
     return ParseResult(scenes=scenes, structured=structured)
+
+
+def _drop_untimed_preamble(scenes: list[ParsedScene]) -> list[ParsedScene]:
+    """타임코드가 있는 대본에서 첫 타임코드 씬 앞의 시각 없는 덩어리는 문서 제목·메모다.
+
+    예: 'HWAX 협업진단 플랫폼 — 소개영상 내레이션 대본 (2분 57초 · 14씬)'. 남겨 두면 영상의
+    0초에 읽혀 첫 씬과 겹친다. 타임코드가 2개 미만인 대본은 손대지 않는다.
+    """
+    timed = [i for i, s in enumerate(scenes) if s.target_start_sec is not None]
+    if len(timed) < 2 or timed[0] == 0:
+        return scenes
+    kept = scenes[timed[0] :]
+    for index, scene in enumerate(kept):
+        scene.index = index
+    return kept
 
 
 def _fill_cumulative_targets(scenes: list[ParsedScene]) -> None:
