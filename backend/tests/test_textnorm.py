@@ -213,3 +213,60 @@ def test_latin_words_reports_leftovers():
 
     assert latin_words("스크루 Screw 와 Ultra, 다시 Screw") == ["Screw", "Ultra"]
     assert latin_words("모두 한글") == []
+
+
+# ── 리뷰에서 재현된 오독 (2026-10-24) ──────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("6월 출시", "유월 출시"),  # 육월이 아니라 유월
+        ("10월 24일", "시월 이십사일"),  # 십월이 아니라 시월
+        ("5달러", "오 달러"),  # '달'(개월) 로 시작해도 고유어 단위가 아니다
+        ("5개국", "오 개국"),
+        ("3개국어", "삼 개국어"),
+        ("5개년 계획", "오 개년 계획"),
+        ("2채널", "이 채널"),
+        ("3시즌", "삼 시즌"),
+        ("제1장", "제일 장"),  # 차례는 한자어
+        ("13시 30분", "십삼 시 삼십분"),  # 24시 표기
+        ("오후 3시", "오후 세 시"),
+        ("13시간", "열세 시간"),  # 길이는 고유어 그대로
+        ("2026.10.24 출시", "이천이십육년 시월 이십사일 출시"),
+    ],
+)
+def test_reviewed_misreadings(text, expected):
+    assert normalize(text) == expected
+
+
+def test_ratio_with_dae_is_sino():
+    assert normalize("1대1 상담").startswith("일 대")
+
+
+def test_double_follows_user_rule_sino():
+    # 사용자 규칙 — 배는 한자어 ('두 배' 가 아니라 '이 배')
+    assert normalize("2배") == "이 배"
+
+
+def test_reading_and_dictionary_respect_number_and_latin_boundaries():
+    assert normalize("누적 16만 명", reading="6만 → 육만") == "누적 십육만 명"
+    assert normalize("6만 건", reading="6만 → 육만") == "육만 건"
+    out = normalize("PAID 플랜과 AI가", dictionary=[("AI", "에이아이")])
+    assert out.endswith("에이아이가") and "P에이아이" not in out
+
+
+@pytest.mark.parametrize(
+    "reading",
+    ["AI→에이아이,6만→육만", "AI → 에이아이 / 6만 → 육만", "AI→에이아이·6만→육만", "AI → 에이아이，6만 → 육만"],
+)
+def test_reading_pair_separators_without_spaces(reading):
+    from app.textnorm import parse_reading_pairs
+
+    assert parse_reading_pairs(reading) == [("AI", "에이아이"), ("6만", "육만")]
+
+
+def test_reading_pair_keeps_middle_dot_and_comma_inside_one_pair():
+    from app.textnorm import parse_reading_pairs
+
+    assert parse_reading_pairs("기구·해석 → 기구, 해석") == [("기구·해석", "기구, 해석")]

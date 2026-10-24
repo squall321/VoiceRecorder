@@ -12,7 +12,7 @@ from .script_formats import (
     parse_cue_lines,
     parse_tables,
 )
-from .textnorm import parse_reading_pairs
+from .textnorm import contains_term, parse_reading_pairs
 
 # 사용자 스크립트는 en dash(–, U+2013) 를 쓴다. 하이픈만 처리하면 전부 파싱에 실패하므로
 # 하이픈·en dash·em dash·물결 을 모두 구분자로 받는다.
@@ -240,7 +240,8 @@ def _attach_reading(scenes: list[ParsedScene], script_pairs: list[tuple[str, str
     """대본 머리의 읽는 법 중 그 씬 본문에 실제로 나오는 것만 씬 읽는 법에 더한다."""
     for scene in scenes:
         pairs = parse_reading_pairs(scene.reading)
-        pairs += [(s, t) for s, t in script_pairs if s in scene.text]
+        # 경계를 지켜 찾는다 — '6만 → 육만' 이 '16만' 씬에 붙지 않게(합성 치환과 같은 규칙)
+        pairs += [(s, t) for s, t in script_pairs if contains_term(scene.text, s)]
         scene.reading = format_pairs(pairs)
 
 

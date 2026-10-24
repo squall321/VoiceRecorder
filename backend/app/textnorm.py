@@ -39,8 +39,10 @@ _NATIVE_COUNTERS = (
 # 1~9 만 고유어로 읽고 10 이상은 한자어로 읽는 단위명사 — '세 개' 지만 '십사 개'.
 # 사용자 대본의 읽는 법이 이렇게 지정한다 (14개 → 십사 개, 76개 → 칠십육 개).
 _NATIVE_UNDER_TEN = ("개", "대", "쌍", "종", "건")
-# 위 단위로 시작하지만 한자어로 읽는 말 — '삼 개월'
-_SINO_DESPITE_COUNTER = ("개월",)
+# 고유어 단위로 시작하지만 한자어로 읽는 말 — '삼 개월', '오 달러', '오 개국', '이 채널', '삼 시즌'
+_SINO_DESPITE_COUNTER = ("개월", "개국", "개년", "달러", "채널", "시즌", "시리즈", "번지")
+# 달 이름의 불규칙 읽기 — 육월·십월이 아니라 유월·시월
+_MONTH_IRREGULAR = {6: "유", 10: "시"}
 
 # 기호 → 읽는 소리
 _SYMBOL_MAP = {
@@ -120,10 +122,13 @@ _LATIN_WORD_RE = re.compile(r"[A-Za-z]+")
 _MIDDLE_DOT_RE = re.compile(r"\s*[·・∙]\s*")
 
 # 읽는 법 쌍 — 'AI → 에이아이 · 6만 → 육만', 'HWAX = 하드웨어 에이엑스, UW = 유더블유', 한 줄에 하나.
-# 원문에 붙어 있는 가운뎃점('전·배면')은 쌍 구분자가 아니므로 양옆이 띄어진 것만 자른다.
-_PAIR_SPLIT_RE = re.compile(r"\n|;|\s[·・]\s|,\s")
+_PAIR_HARD_SPLIT_RE = re.compile(r"\n|;")
+_PAIR_SOFT_SPLIT_RE = re.compile(r"\s*[·・,，/]\s*")
 _PAIR_ARROW_RE = re.compile(r"\s*(?:→|->|=>|=)\s*")
 _PAIR_QUOTES = "「」『』\"'“”‘’"
+
+# '2026.10.24' 꼴 날짜 (연도 4자리 · 월 · 일, 끝의 점은 있어도 없어도)
+_DOT_DATE_RE = re.compile(r"(?<![\d.])(\d{4})\.\s?(\d{1,2})\.\s?(\d{1,2})\.?(?![\d])")
 
 _NUMBER_RE = re.compile(r"(?<![\d.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?")
 _RANGE_RE = re.compile(r"(?<=\d)\s*[~∼]\s*(?=\d)")
@@ -191,16 +196,21 @@ _GLUED_UNITS = ("년", "월", "일", "분", "초", "원", "차", "층", "호", "
 _PARTICLE_STARTS = ("에", "은", "는", "이", "가", "을", "를", "의", "와", "과", "로", "만")
 
 
-def _read_number(match: re.Match[str], following: str) -> str:
+def _read_number(match: re.Match[str], following: str, preceding: str = "") -> str:
     integer_text = match.group(1).replace(",", "")
     fraction = match.group(2)
     value = int(integer_text)
 
     # 소수·큰 수는 무조건 한자어. 고유어 단위명사가 뒤따르고 소수가 아닐 때만 고유어.
-    if fraction is None and 1 <= value <= 99:
+    # '제1장'(차례) 은 단위명사가 붙어도 한자어다.
+    if fraction is None and 1 <= value <= 99 and preceding != "제":
         counter = following.lstrip()
         if counter.startswith(_SINO_DESPITE_COUNTER):
             pass
+        elif counter.startswith("대") and counter[1:2].isdigit():
+            pass  # '1대1', '3대2로' — 대결·비율은 한자어
+        elif counter.startswith("시") and not counter.startswith("시간") and value > 12:
+            pass  # 24시 표기 '13시', '18시' 는 한자어 — '열세 시' 가 아니라 '십삼 시'
         elif counter.startswith(_NATIVE_UNDER_TEN):
             if value <= 9:
                 return native_korean(value, attributive=True) + " "
@@ -209,6 +219,8 @@ def _read_number(match: re.Match[str], following: str) -> str:
             return native_korean(value, attributive=True) + " "
 
     out = sino_korean(value)
+    if fraction is None and following.startswith("월") and value in _MONTH_IRREGULAR:
+        out = _MONTH_IRREGULAR[value]  # 육월·십월이 아니라 유월·시월
     if fraction:
         out += " " + _read_decimal(fraction)
 
@@ -233,10 +245,36 @@ def normalize_numbers(text: str) -> str:
     pos = 0
     for match in _NUMBER_RE.finditer(text):
         result.append(text[pos : match.start()])
-        result.append(_read_number(match, text[match.end() : match.end() + 4]))
+        preceding = text[match.start() - 1] if match.start() else ""
+        result.append(_read_number(match, text[match.end() : match.end() + 4], preceding))
         pos = match.end()
     result.append(text[pos:])
     return "".join(result)
+
+
+def read_dot_dates(text: str) -> str:
+    """'2026.10.24' 를 날짜로 — 그대로 두면 소수('이천이십육 점 일영…')로 읽힌다."""
+
+    def repl(m: re.Match[str]) -> str:
+        year, month, day = m.group(1), int(m.group(2)), int(m.group(3))
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            return m.group(0)
+        return f"{year}년 {month}월 {day}일"
+
+    return _DOT_DATE_RE.sub(repl, text)
+
+
+def _term_pattern(source: str) -> re.Pattern[str]:
+    """원문 표기를 찾는 정규식. 숫자·영문으로 끝나는 쪽에는 경계를 둔다 —
+    '6만 → 육만' 이 '16만' 안에 걸려 '일 육만' 이 되거나, 'AI' 가 'PAID' 안에 걸리지 않게."""
+    head = r"(?<![0-9A-Za-z])" if source[:1].isascii() and source[:1].isalnum() else ""
+    tail = r"(?![0-9A-Za-z])" if source[-1:].isascii() and source[-1:].isalnum() else ""
+    return re.compile(head + re.escape(source) + tail)
+
+
+def contains_term(text: str, source: str) -> bool:
+    source = source.strip()
+    return bool(source) and _term_pattern(source).search(text) is not None
 
 
 def apply_dictionary(text: str, entries: list[tuple[str, str]]) -> str:
@@ -244,20 +282,27 @@ def apply_dictionary(text: str, entries: list[tuple[str, str]]) -> str:
     for source, target in sorted(entries, key=lambda e: len(e[0]), reverse=True):
         source = source.strip()
         if source:
-            text = text.replace(source, target)
+            text = _term_pattern(source).sub(lambda _m, t=target: t, text)
     return text
 
 
 def parse_reading_pairs(reading: str | None) -> list[tuple[str, str]]:
-    """씬 읽는 법 텍스트 → (원문, 읽기) 쌍. 화살표·등호가 없는 조각은 버린다."""
+    """씬 읽는 법 텍스트 → (원문, 읽기) 쌍. 화살표·등호가 없는 조각은 버린다.
+
+    줄바꿈·';' 은 항상 쌍을 나눈다. '·' ',' '/' 는 나눈 조각마다 화살표가 있을 때만 나눈다 —
+    'AI→에이아이,6만→육만' 은 두 쌍이지만 '전·배면 → 전면과 배면' 의 가운뎃점은 원문의 일부다.
+    """
     pairs: list[tuple[str, str]] = []
-    for item in _PAIR_SPLIT_RE.split(reading or ""):
-        parts = _PAIR_ARROW_RE.split(item.strip(), maxsplit=1)
-        if len(parts) != 2:
-            continue
-        source, target = (p.strip().strip(_PAIR_QUOTES).strip() for p in parts)
-        if source and target:
-            pairs.append((source, target))
+    for segment in _PAIR_HARD_SPLIT_RE.split(reading or ""):
+        pieces = [p for p in _PAIR_SOFT_SPLIT_RE.split(segment) if p.strip()]
+        items = pieces if pieces and all(_PAIR_ARROW_RE.search(p) for p in pieces) else [segment]
+        for item in items:
+            parts = _PAIR_ARROW_RE.split(item.strip(), maxsplit=1)
+            if len(parts) != 2:
+                continue
+            source, target = (p.strip().strip(_PAIR_QUOTES).strip() for p in parts)
+            if source and target:
+                pairs.append((source, target))
     return pairs
 
 
@@ -309,7 +354,9 @@ def normalize(
 
     if read_numbers:
         if language == "ko":
-            # 단위가 먼저다 — 'MPa' 를 약어 규칙이 '엠피에이' 로 철자 읽기 전에 잡는다.
+            # 날짜가 먼저다 — '2026.10.24' 를 숫자 규칙이 소수로 읽기 전에 잡는다.
+            text = read_dot_dates(text)
+            # 단위가 약어보다 먼저다 — 'MPa' 를 약어 규칙이 '엠피에이' 로 철자 읽기 전에 잡는다.
             text = read_units(text)
             text = spell_acronyms(text)
         text = normalize_numbers(text)

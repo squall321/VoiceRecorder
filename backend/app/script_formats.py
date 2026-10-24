@@ -54,8 +54,10 @@ _HEAD_NUMBER_RE = re.compile(r"^(?P<num>\d{1,3})[.)]?\s+(?P<title>\S.*)$")
 _NOTE_TAIL_RE = re.compile(r"\s+[—–]\s+.*$")
 
 _READING_LINE_RE = re.compile(
-    r"^\s*(?:[-*•]\s*)?(?:\*\*)?\s*(?:읽는\s?법|읽기)\s*(?:\*\*)?\s*[:：]\s*(?P<pairs>.+)$"
+    r"^\s*(?:[-*•]\s*)?(?:\*\*)?\s*(?:읽는\s?법|읽기)\s*(?:\*\*)?\s*[:：]\s*(?P<pairs>.*)$"
 )
+# '읽는 법:' 아래로 이어지는 목록 줄 — '- HWAX = 하드웨어 에이엑스'
+_READING_ITEM_RE = re.compile(r"^\s*(?:[-*•]\s*)?(?P<pair>\S.*(?:→|->|=>|=).*)$")
 
 
 def seconds_of(token: str) -> float:
@@ -83,12 +85,20 @@ def extract_reading_lines(raw: str) -> tuple[str, list[tuple[str, str]]]:
     """대본 머리의 `읽는 법: HWAX = 하드웨어 에이엑스, UW = 유더블유` 줄을 떼어 쌍으로 돌려준다."""
     pairs: list[tuple[str, str]] = []
     kept: list[str] = []
+    in_list = False  # '읽는 법:' 이 빈 채로 끝나면 다음 줄들이 목록이다
     for line in raw.split("\n"):
         m = _READING_LINE_RE.match(line)
         if m:
             pairs.extend(parse_reading_pairs(m.group("pairs")))
-        else:
-            kept.append(line)
+            in_list = not m.group("pairs").strip()
+            continue
+        if in_list:
+            item = _READING_ITEM_RE.match(line)
+            if item:
+                pairs.extend(parse_reading_pairs(item.group("pair")))
+                continue
+            in_list = False
+        kept.append(line)
     return "\n".join(kept), pairs
 
 

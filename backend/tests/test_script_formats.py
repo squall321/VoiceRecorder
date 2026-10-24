@@ -231,3 +231,14 @@ Manual [0:07–0:15] — 확인 하나에 수 시간이 걸렸습니다."""
 def test_ordinary_narration_lines_are_not_cues(line):
     raw = f"{line}\n두 번째 줄입니다."
     assert all(s.target_start_sec is None for s in parse_script(raw).scenes)
+
+
+def test_reading_list_under_heading_line_and_boundary_attach():
+    raw = """읽는 법:
+- HWAX = 하드웨어 에이엑스
+- 6만 → 육만
+0:00 HWAX 가 6만 건을 정리했습니다.
+0:05 누적 16만 명입니다."""
+    result = parse_script(raw)
+    assert [s.reading for s in result.scenes] == ["HWAX → 하드웨어 에이엑스 · 6만 → 육만", None]
+    assert [s.text for s in result.scenes][1] == "누적 16만 명입니다."
