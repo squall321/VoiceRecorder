@@ -409,6 +409,18 @@ def test_export_requires_synthesized_scenes(client):
     assert response.status_code == 400
 
 
+def test_srt_download_before_export_handles_korean_title(client):
+    # 내보내기 전 SRT 는 즉석에서 만든다 — 한글 제목이 헤더(latin-1)에서 깨지면 안 된다
+    project = _create(client)
+    pid = project["project"]["id"]
+    _synthesize(client, pid)
+
+    response = client.get(f"/api/projects/{pid}/export/srt")
+    assert response.status_code == 200
+    assert "filename*=utf-8''" in response.headers["content-disposition"]
+    assert "질문 하나가" in response.text
+
+
 def test_project_delete_removes_everything(client):
     project = _create(client)
     pid = project["project"]["id"]

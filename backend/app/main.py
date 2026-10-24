@@ -13,6 +13,7 @@ import logging
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -428,7 +429,7 @@ def download_srt(project_id: str):
         return PlainTextResponse(
             render_srt(timeline),
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{_safe_name(project)}.srt"'},
+            headers={"Content-Disposition": _attachment(f"{_safe_name(project)}.srt")},
         )
     return FileResponse(path, media_type="text/plain", filename=f"{_safe_name(project)}.srt")
 
@@ -436,6 +437,11 @@ def download_srt(project_id: str):
 def _safe_name(project: dict) -> str:
     name = "".join(c for c in project["title"] if c.isalnum() or c in " _-").strip()
     return (name or "narration")[:60]
+
+
+def _attachment(filename: str) -> str:
+    """한글 파일명은 헤더(latin-1)에 그대로 못 싣는다 — RFC 5987 로 인코딩한다 (FileResponse 와 같은 방식)."""
+    return f"attachment; filename*=utf-8''{quote(filename)}"
 
 
 def _rerender_all(project: dict) -> None:
